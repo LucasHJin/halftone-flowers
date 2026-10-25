@@ -21,7 +21,7 @@ export interface FlowerFieldOptions {
   cell?: number;
   /** How many dot sizes to use, evenly spaced. Default 5. */
   steps?: number;
-  /** Dot widths as a share of a full diamond, smallest first. Overrides `steps`. */
+  /** Dot sizes as a share of a full diamond, by area, smallest first. Overrides `steps`. */
   sizes?: number[];
   colors?: Partial<HalftoneColors>;
   /** Multiplier on how far the wind bends the stems. Default 1. */

@@ -1,5 +1,5 @@
 /**
- * Turns a three-ink tone image into a diamond halftone.
+ * Turns a three-ink tone image into a halftone of round dots on a diamond lattice.
  *
  * Scenes draw into a hidden canvas in screen coordinates. Its transform rotates
  * and scales them into lattice space, where every on-screen diamond is a square
@@ -10,11 +10,13 @@
  * A second hidden canvas, the reveal, can be laid out the same way to scale
  * each dot, for animating dots in. What its colours mean is up to the caller.
  */
-import { clamp } from "../../utils/math";
+import { clamp, TAU } from "../../utils/math";
 
 /** Samples per diamond along each lattice axis. */
 const SS = 2;
 const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+/** Radius of a circle with the area of a diamond of half-diagonal 1, so each size prints the same tone either way. */
+const ROUND = Math.sqrt(2 / Math.PI);
 
 /**
  * Size multiplier for the dot of diamond (i, j), centred at (x, y), from the
@@ -32,7 +34,7 @@ export interface HalftoneColors {
   light: string;
 }
 
-/** `steps` dot widths, evenly spaced from small to nearly touching. */
+/** `steps` dot sizes, evenly spaced from small to just overlapping their neighbours. */
 export function evenSizes(steps: number) {
   const n = Math.max(1, Math.round(steps));
   return Array.from({ length: n }, (_, i) => (n === 1 ? 0.96 : 0.2 + (0.76 * i) / (n - 1)));
@@ -41,7 +43,7 @@ export function evenSizes(steps: number) {
 export class DiamondHalftone {
   /** Diamond width in CSS px. Takes effect on the next resize. */
   cell = 8;
-  /** Dot widths as a share of a full diamond, smallest first. */
+  /** Dot sizes, smallest first: each dot covers as much as a diamond this share of a full one wide. */
   sizes = evenSizes(5);
 
   private ctx: CanvasRenderingContext2D;
@@ -166,11 +168,9 @@ export class DiamondHalftone {
           if (r < 0.1) continue;
         }
         const path = m >= d && m >= w ? inkPath : d >= w ? darkPath : lightPath;
-        path.moveTo(x, y - r);
-        path.lineTo(x + r, y);
-        path.lineTo(x, y + r);
-        path.lineTo(x - r, y);
-        path.closePath();
+        r *= ROUND;
+        path.moveTo(x + r, y);
+        path.arc(x, y, r, 0, TAU);
       }
     }
 
