@@ -45,7 +45,7 @@ export class FlowerEngine {
   private visible = true;
   private disposed = false;
   private laidOut = "";
-  private lastPointer = { x: 0, y: 0, t: 0 };
+  private lastPointer = 0;
   private reducedMotion: MediaQueryList;
   private resizeObserver: ResizeObserver;
   private intersectionObserver: IntersectionObserver;
@@ -138,14 +138,12 @@ export class FlowerEngine {
     }
   };
 
-  /** Moving the pointer through the stems pushes them the way it's moving. */
+  /** Moving the pointer through the stems pushes them aside. */
   private onPointerMove = (e: PointerEvent) => {
     const rect = this.canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const now = e.timeStamp;
-    const dt = (now - this.lastPointer.t) / 1000;
-    if (dt > 0 && dt < 0.1 && !this.reducedMotion.matches) this.garden.brush(x, y, (x - this.lastPointer.x) / dt);
-    this.lastPointer = { x, y, t: now };
+    // After a pause, or a touch lifting, the pointer may come back anywhere.
+    if (e.timeStamp - this.lastPointer > 150) this.garden.releasePointer();
+    this.lastPointer = e.timeStamp;
+    this.garden.movePointer(e.clientX - rect.left, e.clientY - rect.top);
   };
 }

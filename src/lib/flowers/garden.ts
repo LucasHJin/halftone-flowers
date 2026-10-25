@@ -2,13 +2,24 @@
  * A mixed bed of flowers and grass: a tall bouquet rooted in the bottom-left
  * corner reaching up and to the right, and a low meadow trailing off along the
  * bottom. Each stem sways on a damped spring driven by the wind, so tall stems
- * lag and overshoot a little while short ones follow closely.
+ * lag and overshoot a little while short ones follow closely. The pointer stirs
+ * up its own breeze through the same springs, so brushed flowers lean away and
+ * drift back as unhurriedly as everything else.
  */
 import { clamp, createRandom, lerp, TAU } from "../../utils/math";
 import { SHORT, SPECIES, TALL } from "./species";
 import { createStem, curvedStem, poseStem, SEGMENTS } from "./stem";
-import type { Head, Ink, Kind, Leaf, LeafShape, Plant } from "./types";
+import type { Head, Ink, Kind, Leaf, LeafShape, Plant, Stem } from "./types";
 import { windAt } from "./wind";
+
+/** Wind added per px the pointer travels across a stem it's pressing on. */
+const GUST = 0.055;
+/** The most wind the pointer can add to one stem; a full swell is about 1. */
+const GUST_MAX = 3.5;
+/** Seconds for a gust to fade to about a third. */
+const GUST_FADE = 2;
+/** Seconds for a gust to build up around a stem, so it eases over rather than being knocked. */
+const GUST_RISE = 0.5;
 
 export interface GardenLayout {
   width: number;
@@ -29,6 +40,10 @@ export class Garden {
   private rand: () => number = Math.random;
   private bloom = 40;
   private stemWidth = 3;
+  /** Radius around the pointer that presses on stems. */
+  private hand = 30;
+  /** Where the pointer is, where it was at the last step, and its smoothed velocity. */
+  private pointer = { x: 0, y: 0, lastX: 0, lastY: 0, vx: 0, vy: 0, live: false };
 
   layout({ width: W, height: H, cell, seed, density }: GardenLayout) {
     this.rand = createRandom(seed);
@@ -37,6 +52,7 @@ export class Garden {
     this.nextId = 0;
     this.bloom = clamp(Math.min(W, H) * 0.055, 24, 68);
     this.stemWidth = Math.max(cell * 0.55, Math.min(W, H) * 0.004);
+    this.hand = this.bloom * 0.55;
     // Counts depend on width only, so a phone's URL bar resizing the height doesn't reshuffle the bed.
     const count = Math.round(clamp(W / 62, 10, 26) * density);
 
@@ -97,9 +113,28 @@ export class Garden {
   step(dt: number) {
     this.time += dt;
     const t = this.time;
-    for (const p of this.plants) {
-      for (const s of p.stems) {
-        const target = s.flex * this.wind * windAt(s.x[SEGMENTS], s.y[SEGMENTS], t);
+    const p = this.pointer;
+    let vx = 0;
+    let vy = 0;
+    if (p.live) {
+      // Smoothed over a few steps, since pointer events and steps don't line up one to one.
+      const k = 1 - Math.exp(-dt / 0.05);
+      p.vx += ((p.x - p.lastX) / dt - p.vx) * k;
+      p.vy += ((p.y - p.lastY) / dt - p.vy) * k;
+      p.lastX = p.x;
+      p.lastY = p.y;
+      vx = p.vx;
+      vy = p.vy;
+    }
+    const brushing = vx * vx + vy * vy > 25;
+    const fade = Math.exp(-dt / GUST_FADE);
+    const rise = 1 - Math.exp(-dt / GUST_RISE);
+    for (const plant of this.plants) {
+      for (const s of plant.stems) {
+        if (brushing) this.brush(s, vx, vy, dt);
+        s.gust *= fade;
+        s.breeze += (s.gust - s.breeze) * rise;
+        const target = s.flex * (this.wind * windAt(s.x[SEGMENTS], s.y[SEGMENTS], t) + s.breeze);
         s.bendVel += (s.omega * s.omega * (target - s.bend) - 2 * s.damping * s.omega * s.bendVel) * dt;
         s.bend += s.bendVel * dt;
         // Heads trail the stem's motion and lean a little further with the wind.
@@ -111,16 +146,61 @@ export class Garden {
     }
   }
 
-  /** Pushes stems near (x, y) along with a pointer moving sideways at `vx` px/s. */
-  brush(x: number, y: number, vx: number) {
-    const radius = 90;
-    for (const p of this.plants) {
-      for (const s of p.stems) {
-        let d = Infinity;
-        for (let k = 6; k <= SEGMENTS; k += 4) d = Math.min(d, Math.hypot(s.x[k] - x, s.y[k] - y));
-        if (d < radius) s.bendVel += clamp(vx * 0.0009, -0.6, 0.6) * (1 - d / radius);
+  /** The pointer moved to (x, y). Stems it passes through lean the way it's going, then drift back. */
+  movePointer(x: number, y: number) {
+    const p = this.pointer;
+    if (!p.live) Object.assign(p, { lastX: x, lastY: y, vx: 0, vy: 0, live: true });
+    p.x = x;
+    p.y = y;
+  }
+
+  /** Forgets the pointer, so when it next appears somewhere else it doesn't sweep across the bed to get there. */
+  releasePointer() {
+    this.pointer.live = false;
+  }
+
+  /**
+   * Adds wind to a stem the pointer is passing through, the way it's moving and
+   * most where it meets the head, and a little to stems further off.
+   */
+  private brush(s: Stem, vx: number, vy: number, dt: number) {
+    const { x, y } = this.pointer;
+    const hand = this.hand;
+    const h = s.head;
+    // Spikes and plumes carry their flowers along the top of the stem, which is that much wider to catch.
+    const florets = h && (h.kind === "spike" || h.kind === "plume") ? h : null;
+    const from = florets ? SEGMENTS * (1 - florets.reach) : SEGMENTS;
+    let grip = 0;
+    let at = SEGMENTS - 1;
+    // The lower stem is stiff and mostly hidden, so only the upper two thirds catch.
+    for (let k = SEGMENTS / 3; k < SEGMENTS; k++) {
+      const ax = s.x[k];
+      const ay = s.y[k];
+      const bx = s.x[k + 1] - ax;
+      const by = s.y[k + 1] - ay;
+      const u = clamp(((x - ax) * bx + (y - ay) * by) / (bx * bx + by * by || 1), 0, 1);
+      let d = Math.hypot(ax + bx * u - x, ay + by * u - y);
+      if (florets && k + u >= from) d -= florets.radius;
+      const g = pressure(d, hand) * ((k + u) / SEGMENTS) ** 1.5;
+      if (g > grip) {
+        grip = g;
+        at = k;
       }
     }
+    if (h && !florets) {
+      const g = pressure(Math.hypot(s.x[SEGMENTS] - x, s.y[SEGMENTS] - y) - h.radius * 0.85, hand);
+      if (g > grip) {
+        grip = g;
+        at = SEGMENTS - 1;
+      }
+    }
+    if (grip < 1e-3) return;
+    // Only movement across the stem pushes it; how far, not how fast, so a flick is no rougher than a sweep.
+    // Short stems barely sway in the wind, so they catch more of it to visibly answer the pointer.
+    const a = s.angle[at];
+    const across = (vx * Math.cos(a) + vy * Math.sin(a)) * dt;
+    const catches = Math.sqrt((this.bloom * 8) / (s.segment * SEGMENTS));
+    s.gust = GUST_MAX * Math.tanh((s.gust + GUST * catches * grip * across) / GUST_MAX);
   }
 
   private between(a: number, b: number) {
@@ -240,4 +320,11 @@ export class Garden {
     const length = clamp(stemLength * this.between(0.12, 0.2), 18, 110);
     return { shape, at: Math.round(SEGMENTS * this.between(0.1, 0.5)), side, spread: this.between(0.45, 0.85), length, width: length * this.between(0.18, 0.26), phase };
   }
+}
+
+/** How firmly a pointer `d` px from a stem presses on it: fully within the hand, then a faint stir of air. */
+function pressure(d: number, hand: number) {
+  const touch = d < hand ? (1 - Math.max(d, 0) / hand) ** 2 : 0;
+  const air = d < hand * 3 ? 0.1 * (1 - Math.max(d, 0) / (hand * 3)) ** 2 : 0;
+  return touch + air;
 }

@@ -63,6 +63,10 @@ export interface Stem {
   damping: number;
   bend: number;
   bendVel: number;
+  /** Extra wind the pointer stirred up brushing past, fading over a few seconds. */
+  gust: number;
+  /** How much of that gust has reached the stem so far. */
+  breeze: number;
   /** Extra tilt of the flower head, lagging the stem. */
   nod: number;
   nodVel: number;
