@@ -25,7 +25,6 @@ export function createStem(id: number, rootX: number, rootY: number, segment: nu
     flex: 0.2,
     // Long stems sway slower.
     omega: TAU * clamp(0.5 * Math.sqrt(320 / Math.max(length, 1)), 0.28, 0.9),
-    damping: 0.17,
     bend: 0,
     bendVel: 0,
     gust: 0,

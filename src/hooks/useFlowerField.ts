@@ -1,21 +1,23 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 import { FlowerEngine, type FlowerFieldOptions } from "../lib/flowers";
 
 /**
  * Runs a FlowerEngine on the canvas while it's mounted. Changing an option
- * starts a fresh engine, which grows a new bed unless `seed` is set.
+ * updates the running bed in place (see FlowerEngine.update); only a remount
+ * grows it in again.
  */
 export function useFlowerField(canvasRef: RefObject<HTMLCanvasElement | null>, options: FlowerFieldOptions) {
   const { cell, steps, sizes, colors, wind, density, seed, settings } = options;
-  // Compared by value, so a new array or object literal on each render doesn't restart the engine.
+  // Compared by value, so a new array or object literal on each render doesn't count as a change.
   const sizesKey = sizes?.join(",");
   const { background, ink, dark, light } = colors ?? {};
   const settingsKey = settings ? JSON.stringify(settings) : "";
+  const engineRef = useRef<FlowerEngine | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const engine = new FlowerEngine(canvas, {
+    const next: FlowerFieldOptions = {
       cell,
       steps,
       sizes: sizesKey ? sizesKey.split(",").map(Number) : undefined,
@@ -24,7 +26,16 @@ export function useFlowerField(canvasRef: RefObject<HTMLCanvasElement | null>, o
       density,
       seed,
       settings: settingsKey ? JSON.parse(settingsKey) : undefined,
-    });
-    return () => engine.destroy();
+    };
+    if (engineRef.current) engineRef.current.update(next);
+    else engineRef.current = new FlowerEngine(canvas, next);
   }, [canvasRef, cell, steps, sizesKey, background, ink, dark, light, wind, density, seed, settingsKey]);
+
+  useEffect(
+    () => () => {
+      engineRef.current?.destroy();
+      engineRef.current = null;
+    },
+    [canvasRef],
+  );
 }

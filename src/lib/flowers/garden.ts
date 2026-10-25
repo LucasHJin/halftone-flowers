@@ -49,13 +49,20 @@ export class Garden {
     this.windAt = createWind(settings.wind);
   }
 
+  /** Wind, sway and the pointer follow new settings straight away; the rest waits for the next layout. */
+  configure(settings: FlowerSettings) {
+    this.settings = settings;
+    this.windAt = createWind(settings.wind);
+    this.hand = this.bloom * settings.cursor.reach;
+  }
+
   layout({ width: W, height: H, cell, seed, density, spawn }: GardenLayout) {
     this.width = W;
     this.height = H;
     this.rand = createRandom(seed);
     const rand = this.rand;
     const { flowerSize, stems, bouquet, meadow, grass } = this.settings.layout;
-    const { mix, tone, sway } = this.settings;
+    const { mix, tone } = this.settings;
     this.plants = [];
     this.nextId = 0;
     this.bloom = clamp(Math.min(W, H) * flowerSize.share, flowerSize.min, flowerSize.max);
@@ -105,8 +112,6 @@ export class Garden {
       blade.tipWidth = 0;
       blade.tone = lerp(tone.grass[0], tone.grass[1], depth);
       blade.flex = this.between(0.13, 0.2);
-      blade.omega *= sway.speed;
-      blade.damping = sway.grassDamping;
       this.plants.push({ depth, stems: [blade], spawn: null });
     }
 
@@ -156,13 +161,17 @@ export class Garden {
     const { fade: fadeTime, rise: riseTime } = this.settings.cursor;
     const fade = Math.exp(-dt / fadeTime);
     const rise = 1 - Math.exp(-dt / riseTime);
+    const { speed, damping, grassDamping } = this.settings.sway;
     for (const plant of this.plants) {
       for (const s of plant.stems) {
         if (brushing) this.brush(s, vx, vy, dt);
         s.gust *= fade;
         s.breeze += (s.gust - s.breeze) * rise;
         const target = s.flex * (this.wind * this.windAt(s.x[SEGMENTS], s.y[SEGMENTS], t) + s.breeze);
-        s.bendVel += (s.omega * s.omega * (target - s.bend) - 2 * s.damping * s.omega * s.bendVel) * dt;
+        const omega = s.omega * speed;
+        // Grass blades are the only stems without a head.
+        const zeta = s.head ? damping : grassDamping;
+        s.bendVel += (omega * omega * (target - s.bend) - 2 * zeta * omega * s.bendVel) * dt;
         s.bend += s.bendVel * dt;
         // Heads trail the stem's motion and lean a little further with the wind.
         const nodTarget = 0.3 * s.bend - 0.25 * s.bendVel;
@@ -250,7 +259,7 @@ export class Garden {
 
   /** One flowering plant: a main stem with its head and leaves, and sometimes a side branch. */
   private plant(kind: Kind, rootX: number, rootY: number, headX: number, headY: number, depth: number, scale: number, tall: boolean) {
-    const { species, tone, sway } = this.settings;
+    const { species, tone } = this.settings;
     const sp = species[kind];
     const main = this.curved(rootX, rootY, headX, headY, this.between(...sp.lean));
     const length = main.segment * SEGMENTS;
@@ -258,8 +267,6 @@ export class Garden {
     main.tipWidth = this.stemWidth * sp.stem * 0.75;
     main.tone = lerp(tone.stems[0], tone.stems[1], depth);
     main.flex = this.between(0.08, 0.13) * sp.flex * clamp(length / 400, 0.6, 1.4);
-    main.omega *= sway.speed;
-    main.damping = sway.damping;
     main.head = this.head(kind, depth, scale);
     if (kind === "bud" && this.rand() < 0.5) {
       // A nodding bud, its stem hooked over at the top like a poppy's.
@@ -289,8 +296,7 @@ export class Garden {
       branch.tipWidth = this.stemWidth * 0.7;
       branch.tone = main.tone;
       branch.flex = main.flex * 0.8;
-      branch.omega *= 1.4 * sway.speed;
-      branch.damping = sway.damping;
+      branch.omega *= 1.4;
       branch.head = this.rand() < 0.6 ? this.head(kind, depth, scale * 0.65) : this.head("bud", depth, scale);
       if (main.head && branch.head.kind === main.head.kind) {
         branch.head.ink = main.head.ink;

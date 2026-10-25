@@ -59,8 +59,8 @@ export interface Stem {
   tone: number;
   /** Tip bend per unit of wind, radians. */
   flex: number;
+  /** Swing rate at a sway speed of 1, radians a second. */
   omega: number;
-  damping: number;
   bend: number;
   bendVel: number;
   /** Extra wind the pointer stirred up brushing past, fading over a few seconds. */

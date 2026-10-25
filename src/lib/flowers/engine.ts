@@ -37,7 +37,8 @@ export interface FlowerFieldOptions {
 /**
  * Grows a garden on a canvas and keeps it swaying: fixed-timestep loop,
  * growing in on first show, re-layout on resize, pointer brushing, pausing
- * off-screen, and a still frame for prefers-reduced-motion.
+ * off-screen, and a still frame for prefers-reduced-motion. `update` takes
+ * new options without growing in again.
  */
 export class FlowerEngine {
   private settings: FlowerSettings;
@@ -57,13 +58,8 @@ export class FlowerEngine {
 
   constructor(private canvas: HTMLCanvasElement, private options: FlowerFieldOptions = {}) {
     this.seed = options.seed ?? (Math.random() * 2 ** 32) >>> 0;
-    const colors = { ...DEFAULT_COLORS };
-    for (const key of Object.keys(colors) as (keyof HalftoneColors)[]) {
-      const value = options.colors?.[key];
-      if (value) colors[key] = value;
-    }
-    this.halftone = new DiamondHalftone(canvas, colors);
-    this.halftone.sizes = options.sizes?.length ? options.sizes : evenSizes(options.steps ?? 5);
+    this.halftone = new DiamondHalftone(canvas, resolveColors(options.colors));
+    this.halftone.sizes = dotSizes(options);
     this.settings = resolveSettings(options.settings);
     this.garden = new Garden(this.settings);
     this.garden.wind = options.wind ?? 1;
@@ -84,6 +80,31 @@ export class FlowerEngine {
     this.schedule();
   }
 
+  /**
+   * Colours, dots, wind, sway and the pointer change straight away. A new
+   * seed, cell, density, layout, species, mix or tone lays the bed out again
+   * where it stands. Spawn settings apply to the next engine.
+   */
+  update(options: FlowerFieldOptions) {
+    const before = this.options;
+    const settings = resolveSettings(options.settings);
+    const seed = options.seed ?? this.seed;
+    const relayout =
+      seed !== this.seed ||
+      options.cell !== before.cell ||
+      (options.density ?? 1) !== (before.density ?? 1) ||
+      bedKey(settings) !== bedKey(this.settings);
+    this.options = options;
+    this.seed = seed;
+    this.settings = settings;
+    this.garden.configure(settings);
+    this.garden.wind = options.wind ?? 1;
+    this.halftone.colors = resolveColors(options.colors);
+    this.halftone.sizes = dotSizes(options);
+    if (relayout) this.resize(true);
+    else if (this.reducedMotion.matches) this.draw();
+  }
+
   destroy() {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
@@ -102,7 +123,7 @@ export class FlowerEngine {
     halftone.present(spawnScale(garden.spawnPlan!, growing, garden.height));
   }
 
-  private resize() {
+  private resize(relayout = false) {
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width < 1 || rect.height < 1) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -110,7 +131,7 @@ export class FlowerEngine {
     this.halftone.cell = cell;
     this.halftone.resize(rect.width, rect.height, dpr);
     const key = `${rect.width}x${rect.height}`;
-    if (key !== this.laidOut) {
+    if (relayout || key !== this.laidOut) {
       // Only the first layout grows in; after a resize the bed is just there.
       const spawn = !this.laidOut && !this.reducedMotion.matches && this.settings.spawn.enabled;
       this.laidOut = key;
@@ -160,4 +181,22 @@ export class FlowerEngine {
     this.lastPointer = e.timeStamp;
     this.garden.movePointer(e.clientX - rect.left, e.clientY - rect.top);
   };
+}
+
+function resolveColors(colors: Partial<HalftoneColors> | undefined) {
+  const out = { ...DEFAULT_COLORS };
+  for (const key of Object.keys(out) as (keyof HalftoneColors)[]) {
+    const value = colors?.[key];
+    if (value) out[key] = value;
+  }
+  return out;
+}
+
+function dotSizes({ sizes, steps }: FlowerFieldOptions) {
+  return sizes?.length ? sizes : evenSizes(steps ?? 5);
+}
+
+/** The settings a garden is laid out from, as a string to compare. */
+function bedKey({ layout, species, mix, tone }: FlowerSettings) {
+  return JSON.stringify([layout, species, mix, tone]);
 }
