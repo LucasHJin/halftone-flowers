@@ -44,6 +44,14 @@ export interface ToneSettings {
   grass: [number, number];
 }
 
+/** How each plant's colours move along the ramp from light to dark, so plants that overlap print in different shades. */
+export interface ShadeSettings {
+  /** How much lighter the back of the bed prints than the front, as a share of the ramp. */
+  depth: number;
+  /** How far each plant strays from that at random, either way, as a share of the ramp. */
+  jitter: number;
+}
+
 /** One wave of wind rolling across the bed from the left. */
 export interface WindWave {
   /** How hard it blows at its crest, in the same units as `lean`. */
@@ -107,6 +115,7 @@ export interface FlowerSettings {
   species: Record<Kind, Species>;
   mix: { bouquet: Mix; meadow: Mix };
   tone: ToneSettings;
+  shade: ShadeSettings;
   wind: WindSettings;
   sway: SwaySettings;
   cursor: CursorSettings;
@@ -127,6 +136,7 @@ export const DEFAULT_SETTINGS: FlowerSettings = {
   species: SPECIES,
   mix: { bouquet: BOUQUET_MIX, meadow: MEADOW_MIX },
   tone: { flowers: [0.6, 1], stems: [0.55, 0.85], grass: [0.4, 0.7] },
+  shade: { depth: 0.15, jitter: 0.12 },
   wind: {
     lean: 0.3,
     waves: [

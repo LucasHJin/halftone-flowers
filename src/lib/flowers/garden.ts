@@ -45,11 +45,11 @@ export class Garden {
   private pointer = { x: 0, y: 0, lastX: 0, lastY: 0, vx: 0, vy: 0, live: false };
   private spawnFrom: number | null = null;
 
-  constructor(private settings: FlowerSettings) {
+  constructor(public settings: FlowerSettings) {
     this.windAt = createWind(settings.wind);
   }
 
-  /** Wind, sway and the pointer follow new settings straight away; the rest waits for the next layout. */
+  /** Wind, sway, shade and the pointer follow new settings straight away; the rest waits for the next layout. */
   configure(settings: FlowerSettings) {
     this.settings = settings;
     this.windAt = createWind(settings.wind);

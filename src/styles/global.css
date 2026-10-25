@@ -1,6 +1,6 @@
 :root {
   /* Same as the flower field's default background, so nothing flashes before its first frame. */
-  --page: #f8dbe7;
+  --page: #f5f8fd;
 }
 
 *,

@@ -7,7 +7,7 @@ import { FlowerEngine, type FlowerFieldOptions } from "../lib/flowers";
  * grows it in again.
  */
 export function useFlowerField(canvasRef: RefObject<HTMLCanvasElement | null>, options: FlowerFieldOptions) {
-  const { cell, steps, sizes, colors, wind, density, seed, settings } = options;
+  const { cell, steps, sizes, shades, spread, threshold, colors, wind, density, seed, settings } = options;
   // Compared by value, so a new array or object literal on each render doesn't count as a change.
   const sizesKey = sizes?.join(",");
   const { background, ink, dark, light } = colors ?? {};
@@ -21,6 +21,9 @@ export function useFlowerField(canvasRef: RefObject<HTMLCanvasElement | null>, o
       cell,
       steps,
       sizes: sizesKey ? sizesKey.split(",").map(Number) : undefined,
+      shades,
+      spread,
+      threshold,
       colors: { background, ink, dark, light },
       wind,
       density,
@@ -29,7 +32,7 @@ export function useFlowerField(canvasRef: RefObject<HTMLCanvasElement | null>, o
     };
     if (engineRef.current) engineRef.current.update(next);
     else engineRef.current = new FlowerEngine(canvas, next);
-  }, [canvasRef, cell, steps, sizesKey, background, ink, dark, light, wind, density, seed, settingsKey]);
+  }, [canvasRef, cell, steps, sizesKey, shades, spread, threshold, background, ink, dark, light, wind, density, seed, settingsKey]);
 
   useEffect(
     () => () => {

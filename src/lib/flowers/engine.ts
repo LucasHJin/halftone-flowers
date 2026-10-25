@@ -8,12 +8,12 @@ import { spawnScale } from "./spawn";
 const STEP = 1 / 60;
 const MAX_STEPS = 4;
 
-/** Light pink page, pink-purple and plum inks, and white. */
+/** Near-white blue page, and a ramp from pale blue through blue to navy. */
 export const DEFAULT_COLORS: HalftoneColors = {
-  background: "#f8dbe7",
-  ink: "#c13f92",
-  dark: "#6d1f63",
-  light: "#ffffff",
+  background: "#f5f8fd",
+  light: "#a9c5ef",
+  ink: "#3a6fd8",
+  dark: "#16295f",
 };
 
 export interface FlowerFieldOptions {
@@ -23,14 +23,21 @@ export interface FlowerFieldOptions {
   steps?: number;
   /** Dot sizes as a share of a full diamond, by area, smallest first. Overrides `steps`. */
   sizes?: number[];
+  /** Background, and the colour ramp from `light` through `ink` to `dark` that every dot takes a shade of. */
   colors?: Partial<HalftoneColors>;
+  /** How many shades the colour ramp is split into. Default 9. */
+  shades?: number;
+  /** How far ink spreads before it sets, as a share of a diamond's width: dots blur and are cut back sharp, so near ones run together. Default 0.1; 0 keeps every dot round. */
+  spread?: number;
+  /** Where spread ink is cut back, from 0 to 1: lower keeps more of it, so dots swell and merge more. Default 0.3. */
+  threshold?: number;
   /** Multiplier on how far the wind bends the stems. Default 1. */
   wind?: number;
   /** Multiplier on the number of stems. Default 1. */
   density?: number;
   /** Fixes the arrangement. Without one, each mount grows a different bed. */
   seed?: number;
-  /** Finer tuning of the layout, species, wind, sway, pointer and spawn. Anything left out keeps its default. */
+  /** Finer tuning of the layout, species, shade, wind, sway, pointer and spawn. Anything left out keeps its default. */
   settings?: FlowerSettingsInput;
 }
 
@@ -59,7 +66,7 @@ export class FlowerEngine {
   constructor(private canvas: HTMLCanvasElement, private options: FlowerFieldOptions = {}) {
     this.seed = options.seed ?? (Math.random() * 2 ** 32) >>> 0;
     this.halftone = new DiamondHalftone(canvas, resolveColors(options.colors));
-    this.halftone.sizes = dotSizes(options);
+    this.setDots(options);
     this.settings = resolveSettings(options.settings);
     this.garden = new Garden(this.settings);
     this.garden.wind = options.wind ?? 1;
@@ -81,9 +88,9 @@ export class FlowerEngine {
   }
 
   /**
-   * Colours, dots, wind, sway and the pointer change straight away. A new
-   * seed, cell, density, layout, species, mix or tone lays the bed out again
-   * where it stands. Spawn settings apply to the next engine.
+   * Colours, dots, ink, shade, wind, sway and the pointer change straight
+   * away. A new seed, cell, density, layout, species, mix or tone lays the bed
+   * out again where it stands. Spawn settings apply to the next engine.
    */
   update(options: FlowerFieldOptions) {
     const before = this.options;
@@ -100,18 +107,28 @@ export class FlowerEngine {
     this.garden.configure(settings);
     this.garden.wind = options.wind ?? 1;
     this.halftone.colors = resolveColors(options.colors);
-    this.halftone.sizes = dotSizes(options);
+    this.setDots(options);
+    this.halftone.applyInk();
     if (relayout) this.resize(true);
     else if (this.reducedMotion.matches) this.draw();
   }
 
   destroy() {
     this.disposed = true;
+    this.halftone.destroy();
     cancelAnimationFrame(this.raf);
     this.resizeObserver.disconnect();
     this.intersectionObserver.disconnect();
     this.reducedMotion.removeEventListener("change", this.onMotionPreference);
     window.removeEventListener("pointermove", this.onPointerMove);
+  }
+
+  /** Dot sizes, shades and ink spread from the options. `applyInk` or a resize puts the spread on the canvas. */
+  private setDots({ sizes, steps, shades, spread, threshold }: FlowerFieldOptions) {
+    this.halftone.sizes = sizes?.length ? sizes : evenSizes(steps ?? 5);
+    this.halftone.shades = shades ?? 9;
+    this.halftone.spread = spread ?? 0.1;
+    this.halftone.threshold = threshold ?? 0.3;
   }
 
   private draw() {
@@ -190,10 +207,6 @@ function resolveColors(colors: Partial<HalftoneColors> | undefined) {
     if (value) out[key] = value;
   }
   return out;
-}
-
-function dotSizes({ sizes, steps }: FlowerFieldOptions) {
-  return sizes?.length ? sizes : evenSizes(steps ?? 5);
 }
 
 /** The settings a garden is laid out from, as a string to compare. */

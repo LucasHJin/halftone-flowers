@@ -13,7 +13,7 @@ import {
 } from "../lib/flowers";
 import { clamp, TAU } from "../utils/math";
 
-const { layout, species, mix, tone, wind, sway, cursor, spawn } = DEFAULT_SETTINGS;
+const { layout, species, mix, tone, shade, wind, sway, cursor, spawn } = DEFAULT_SETTINGS;
 const KINDS = Object.keys(species) as Kind[];
 const LEAVES: LeafShape[] = ["lance", "strap", "oval"];
 
@@ -98,15 +98,23 @@ function springSway(spring: TransitionConfig): Pick<SwaySettings, "speed" | "dam
 const CONFIG = {
   colors: {
     background: DEFAULT_COLORS.background,
+    light: DEFAULT_COLORS.light,
     ink: DEFAULT_COLORS.ink,
     dark: DEFAULT_COLORS.dark,
-    light: DEFAULT_COLORS.light,
+  },
+  shade: {
+    _collapsed: true,
+    shades: slider(9, 1, 25, 2),
+    depth: slider(shade.depth, 0, 1, 0.01),
+    jitter: slider(shade.jitter, 0, 0.5, 0.01),
   },
   halftone: {
     _collapsed: true,
     autoCell: true,
     cell: slider(8, 3, 20, 1),
     steps: slider(5, 1, 10, 1),
+    spread: slider(0.1, 0, 0.5, 0.01),
+    threshold: slider(0.3, 0.05, 0.95, 0.01),
   },
   wind: {
     _collapsed: true,
@@ -209,11 +217,14 @@ function toWave(d: ResolvedValues<ReturnType<typeof waveDials>>): WindWave {
 }
 
 function toOptions(v: Values, seed: number): FlowerFieldOptions {
-  const { halftone, colors, layout, tone, wind, sway, cursor, spawn } = v;
+  const { halftone, colors, shade, layout, tone, wind, sway, cursor, spawn } = v;
   return {
     cell: halftone.autoCell ? undefined : halftone.cell,
     steps: halftone.steps,
-    colors: { background: colors.background, ink: colors.ink, dark: colors.dark, light: colors.light },
+    shades: shade.shades,
+    spread: halftone.spread,
+    threshold: halftone.threshold,
+    colors: { background: colors.background, light: colors.light, ink: colors.ink, dark: colors.dark },
     wind: wind.bend,
     density: layout.density,
     seed,
@@ -239,6 +250,7 @@ function toOptions(v: Values, seed: number): FlowerFieldOptions {
         stems: [tone.stemsBack, tone.stemsFront],
         grass: [tone.grassBack, tone.grassFront],
       },
+      shade: { depth: shade.depth, jitter: shade.jitter },
       wind: { lean: wind.lean, waves: [toWave(wind.slowWave), toWave(wind.midWave), toWave(wind.fastWave)] },
       sway: { ...springSway(sway.spring), grassDamping: sway.grassDamping },
       cursor: { strength: cursor.strength, limit: cursor.limit, rise: cursor.rise, fade: cursor.fade, reach: cursor.reach },

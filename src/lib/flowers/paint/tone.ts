@@ -3,13 +3,27 @@ import { clamp, lerp, TAU } from "../../../utils/math";
 import { SEGMENTS } from "../stem";
 import type { Ink, Stem } from "../types";
 
-let mask: string | null = null;
+/** Each ink's place on the colour ramp, from 0 light to 1 dark. */
+const RAMP: Record<Ink, number> = { 0: 0.5, 1: 1, 2: 0 };
 
-/** Fill style for `amount` of one ink: red is main, green dark, blue white. */
+let mask: string | null = null;
+let shift = 0;
+
+/** Fill style for `amount` of one ink: red is how much ink, green that times how far toward dark it sits. */
 export function tone(ink: Ink, amount: number) {
   if (mask) return mask;
-  const v = Math.round(clamp(amount, 0, 1) * 255);
-  return ink === 0 ? `rgb(${v},0,0)` : ink === 1 ? `rgb(0,${v},0)` : `rgb(0,0,${v})`;
+  const v = clamp(amount, 0, 1) * 255;
+  return `rgb(${Math.round(v)},${Math.round(v * clamp(RAMP[ink] + shift, 0, 1))},0)`;
+}
+
+/** Runs `paint` with every ink moved `by` along the colour ramp, toward dark if positive. */
+export function inShade(by: number, paint: () => void) {
+  shift = by;
+  try {
+    paint();
+  } finally {
+    shift = 0;
+  }
 }
 
 /** Runs `paint` with every fill and stroke in one flat colour instead of its inks, to draw a mask. */

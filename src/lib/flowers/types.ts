@@ -1,4 +1,4 @@
-/** 0 is the main pink-purple ink, 1 the dark one, 2 white. */
+/** Where on the colour ramp a part starts, before its plant's shade moves it: 0 the middle (main ink), 1 the dark end, 2 the light end. */
 export type Ink = 0 | 1 | 2;
 
 export type Kind = "cosmos" | "daisy" | "lily" | "poppy" | "tulip" | "rose" | "bud" | "spike" | "plume" | "cluster";

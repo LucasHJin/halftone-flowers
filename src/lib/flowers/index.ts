@@ -6,6 +6,7 @@ export {
   type FlowerSettingsInput,
   type LayoutSettings,
   type Mix,
+  type ShadeSettings,
   type SpawnSettings,
   type SwaySettings,
   type ToneSettings,
