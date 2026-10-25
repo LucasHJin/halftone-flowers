@@ -1,0 +1,21 @@
+:root {
+  /* Same as the flower field's default background, so nothing flashes before its first frame. */
+  --page: #f8dbe7;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--page);
+}
