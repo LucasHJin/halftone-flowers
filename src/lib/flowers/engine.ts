@@ -2,6 +2,7 @@ import { clamp } from "../../utils/math";
 import { DiamondHalftone, evenSizes, type HalftoneColors } from "../halftone";
 import { Garden } from "./garden";
 import { paintGarden } from "./paint";
+import { resolveSettings, type FlowerSettings, type FlowerSettingsInput } from "./settings";
 import { spawnScale } from "./spawn";
 
 const STEP = 1 / 60;
@@ -29,6 +30,8 @@ export interface FlowerFieldOptions {
   density?: number;
   /** Fixes the arrangement. Without one, each mount grows a different bed. */
   seed?: number;
+  /** Finer tuning of the layout, species, wind, sway, pointer and spawn. Anything left out keeps its default. */
+  settings?: FlowerSettingsInput;
 }
 
 /**
@@ -37,7 +40,8 @@ export interface FlowerFieldOptions {
  * off-screen, and a still frame for prefers-reduced-motion.
  */
 export class FlowerEngine {
-  private garden = new Garden();
+  private settings: FlowerSettings;
+  private garden: Garden;
   private halftone: DiamondHalftone;
   private seed: number;
   private raf = 0;
@@ -60,6 +64,8 @@ export class FlowerEngine {
     }
     this.halftone = new DiamondHalftone(canvas, colors);
     this.halftone.sizes = options.sizes?.length ? options.sizes : evenSizes(options.steps ?? 5);
+    this.settings = resolveSettings(options.settings);
+    this.garden = new Garden(this.settings);
     this.garden.wind = options.wind ?? 1;
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -93,7 +99,7 @@ export class FlowerEngine {
     const growing = garden.growing;
     if (growing === null) return halftone.present();
     paintGarden(halftone.beginReveal(), garden, true);
-    halftone.present(spawnScale(growing, garden.height));
+    halftone.present(spawnScale(garden.spawnPlan!, growing, garden.height));
   }
 
   private resize() {
@@ -106,7 +112,7 @@ export class FlowerEngine {
     const key = `${rect.width}x${rect.height}`;
     if (key !== this.laidOut) {
       // Only the first layout grows in; after a resize the bed is just there.
-      const spawn = !this.laidOut && !this.reducedMotion.matches;
+      const spawn = !this.laidOut && !this.reducedMotion.matches && this.settings.spawn.enabled;
       this.laidOut = key;
       this.garden.layout({ width: rect.width, height: rect.height, cell, seed: this.seed, density: this.options.density ?? 1, spawn });
     }

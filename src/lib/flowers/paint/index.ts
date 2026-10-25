@@ -26,8 +26,9 @@ import { inMask } from "./tone";
 /** Paints the garden's tone image, or with `mask`, the spawn mask in the same shapes. */
 export function paintGarden(ctx: CanvasRenderingContext2D, garden: Garden, mask = false) {
   const growing = garden.growing;
+  const plan = garden.spawnPlan;
   for (const plant of garden.plants) {
-    if (growing === null || !plant.spawn) {
+    if (growing === null || !plan || !plant.spawn) {
       paintPlant(ctx, plant, garden.time);
       continue;
     }
@@ -37,7 +38,7 @@ export function paintGarden(ctx: CanvasRenderingContext2D, garden: Garden, mask 
     ctx.beginPath();
     ctx.rect(-garden.width, front, garden.width * 3, garden.height * 2);
     ctx.clip();
-    if (mask) inMask(spawnColor(plant), () => paintPlant(ctx, plant, garden.time));
+    if (mask) inMask(spawnColor(plant, plan), () => paintPlant(ctx, plant, garden.time));
     else paintPlant(ctx, plant, garden.time);
     ctx.restore();
   }

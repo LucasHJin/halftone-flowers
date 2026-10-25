@@ -6,10 +6,11 @@ import { FlowerEngine, type FlowerFieldOptions } from "../lib/flowers";
  * starts a fresh engine, which grows a new bed unless `seed` is set.
  */
 export function useFlowerField(canvasRef: RefObject<HTMLCanvasElement | null>, options: FlowerFieldOptions) {
-  const { cell, steps, sizes, colors, wind, density, seed } = options;
+  const { cell, steps, sizes, colors, wind, density, seed, settings } = options;
   // Compared by value, so a new array or object literal on each render doesn't restart the engine.
   const sizesKey = sizes?.join(",");
   const { background, ink, dark, light } = colors ?? {};
+  const settingsKey = settings ? JSON.stringify(settings) : "";
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -22,7 +23,8 @@ export function useFlowerField(canvasRef: RefObject<HTMLCanvasElement | null>, o
       wind,
       density,
       seed,
+      settings: settingsKey ? JSON.parse(settingsKey) : undefined,
     });
     return () => engine.destroy();
-  }, [canvasRef, cell, steps, sizesKey, background, ink, dark, light, wind, density, seed]);
+  }, [canvasRef, cell, steps, sizesKey, background, ink, dark, light, wind, density, seed, settingsKey]);
 }

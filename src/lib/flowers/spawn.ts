@@ -1,7 +1,8 @@
 /**
  * The bed grows in when it first appears: each plant from the ground up, a few
  * at a time spreading out from the corner, each diamond growing into its dot
- * with a slight pop. Every plant is in within SPAWN_TIME of the first starting.
+ * with a slight pop. Every plant is in within the spawn's duration of the
+ * first starting.
  *
  * The halftone only knows dots, so the timing reaches it through a mask: each
  * plant is painted again in one flat colour, red for when its front crosses
@@ -11,22 +12,25 @@
  */
 import { clamp, createRandom, lerp } from "../../utils/math";
 import type { DotScale } from "../halftone";
+import type { SpawnSettings } from "./settings";
 import { SEGMENTS } from "./stem";
 import type { Plant } from "./types";
 
-/** Seconds from the first plant starting to the last one being fully in. */
-export const SPAWN_TIME = 1.5;
-/** Seconds for one diamond to grow into its dot. */
-const GROW = 0.5;
-/** Most a diamond lags behind the front, so the front doesn't fill in row by row. */
-const SCATTER = 0.1;
-/** Seconds for the front to climb a whole plant. */
-const CLIMB: [number, number] = [0.25, 0.45];
-/** Paces the mask can carry, as logs of seconds per px. */
-const PACE: [number, number] = [Math.log(1e-4), Math.log(0.03)];
+/** The timings shared by every plant, and the ranges the mask's colours span. */
+export interface SpawnPlan {
+  /** Seconds until the last diamond is in. */
+  end: number;
+  grow: number;
+  scatter: number;
+  /** Latest time a front crosses the bottom of the screen. */
+  latest: number;
+  /** Fastest and slowest climb, as logs of seconds per px. */
+  pace: [number, number];
+}
 
 /** Gives each plant its start and climbing pace. Call once the plants are posed. */
-export function planSpawn(plants: Plant[], width: number, height: number, seed: number) {
+export function planSpawn(plants: Plant[], width: number, height: number, seed: number, settings: SpawnSettings): SpawnPlan {
+  const { duration, grow, scatter, climb, order } = settings;
   // Its own sequence, so the same seed grows the same bed whether or not it spawns.
   const rand = createRandom(seed ^ 0x5bd1e995);
   const plans = plants.map((p) => {
@@ -38,17 +42,27 @@ export function planSpawn(plants: Plant[], width: number, height: number, seed: 
     }
     // Loosely outward from the bottom-left corner.
     const far = Math.hypot(main.x[SEGMENTS] / width, (height - main.y[SEGMENTS]) / height);
-    return { root: main.rootY, top, order: 0.6 * far + 0.4 * rand() };
+    return { root: main.rootY, top, order: order * far + (1 - order) * rand() };
   });
   const first = Math.min(...plans.map((p) => p.order));
   const last = Math.max(...plans.map((p) => p.order));
+  let end = duration;
+  let latest = 0;
+  let fastest = Infinity;
+  let slowest = -Infinity;
   plants.forEach((plant, i) => {
     const { root, top, order } = plans[i];
-    const climb = lerp(CLIMB[0], CLIMB[1], rand());
-    const start = ((order - first) / (last - first || 1)) * (SPAWN_TIME - climb - GROW - SCATTER);
-    const pace = climb / Math.max(root - top, 1);
+    const time = lerp(climb[0], climb[1], rand());
+    // If the timings don't fit in the duration, everything starts together and runs over.
+    const start = ((order - first) / (last - first || 1)) * Math.max(duration - time - grow - scatter, 0);
+    const pace = time / Math.max(root - top, 1);
     plant.spawn = { bottom: start + (root - height) * pace, pace };
+    end = Math.max(end, start + time + grow + scatter);
+    latest = Math.max(latest, plant.spawn.bottom);
+    fastest = Math.min(fastest, Math.log(pace));
+    slowest = Math.max(slowest, Math.log(pace));
   });
+  return { end, grow, scatter, latest: latest || 1, pace: [fastest - 0.01, slowest + 0.01] };
 }
 
 /** Where a plant's front is `elapsed` seconds in: nothing above it has started growing. */
@@ -58,22 +72,24 @@ export function spawnFront(plant: Plant, elapsed: number, height: number) {
 }
 
 /** The flat colour a plant is painted in for the spawn mask. */
-export function spawnColor(plant: Plant) {
+export function spawnColor(plant: Plant, plan: SpawnPlan) {
   const s = plant.spawn!;
-  const r = Math.round(clamp(s.bottom / SPAWN_TIME, 0, 1) * 255);
-  const g = Math.round(clamp((Math.log(s.pace) - PACE[0]) / (PACE[1] - PACE[0]), 0, 1) * 255);
+  const [lo, hi] = plan.pace;
+  const r = Math.round(clamp(s.bottom / plan.latest, 0, 1) * 255);
+  const g = Math.round(clamp((Math.log(s.pace) - lo) / (hi - lo), 0, 1) * 255);
   return `rgb(${r},${g},255)`;
 }
 
 /** Reads the spawn mask: how big each diamond's dot is `elapsed` seconds in. */
-export function spawnScale(elapsed: number, height: number): DotScale {
+export function spawnScale(plan: SpawnPlan, elapsed: number, height: number): DotScale {
+  const { grow, scatter, latest, pace: [lo, hi] } = plan;
   return (r, g, b, _x, y, i, j) => {
     if (b === 0) return 1;
     // Dividing by coverage undoes antialiasing at the edges; where plants meet, their timings blend.
-    const bottom = (r / b) * SPAWN_TIME;
-    const pace = Math.exp(lerp(PACE[0], PACE[1], g / b));
-    const reached = bottom + (height - y) * pace + SCATTER * scatter(i, j);
-    return pop(clamp((elapsed - reached) / GROW, 0, 1));
+    const bottom = (r / b) * latest;
+    const pace = Math.exp(lerp(lo, hi, g / b));
+    const reached = bottom + (height - y) * pace + scatter * hash(i, j);
+    return pop(clamp((elapsed - reached) / grow, 0, 1));
   };
 }
 
@@ -84,7 +100,7 @@ function pop(t: number) {
 }
 
 /** A steady pseudo-random 0–1 per diamond. */
-function scatter(i: number, j: number) {
+function hash(i: number, j: number) {
   let h = Math.imul(i, 374761393) + Math.imul(j, 668265263);
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;

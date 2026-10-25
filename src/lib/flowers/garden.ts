@@ -7,20 +7,11 @@
  * drift back as unhurriedly as everything else.
  */
 import { clamp, createRandom, lerp, TAU } from "../../utils/math";
-import { planSpawn, SPAWN_TIME } from "./spawn";
-import { SHORT, SPECIES, TALL } from "./species";
+import type { FlowerSettings, Mix } from "./settings";
+import { planSpawn, type SpawnPlan } from "./spawn";
 import { createStem, curvedStem, poseStem, SEGMENTS } from "./stem";
 import type { Head, Ink, Kind, Leaf, LeafShape, Plant, Stem } from "./types";
-import { windAt } from "./wind";
-
-/** Wind added per px the pointer travels across a stem it's pressing on. */
-const GUST = 0.055;
-/** The most wind the pointer can add to one stem; a full swell is about 1. */
-const GUST_MAX = 3.5;
-/** Seconds for a gust to fade to about a third. */
-const GUST_FADE = 2;
-/** Seconds for a gust to build up around a stem, so it eases over rather than being knocked. */
-const GUST_RISE = 0.5;
+import { createWind, type Wind } from "./wind";
 
 export interface GardenLayout {
   width: number;
@@ -41,6 +32,9 @@ export class Garden {
   height = 0;
   /** Multiplier on how far the wind bends things. */
   wind = 1;
+  /** The timings of the bed growing in, while it is. */
+  spawnPlan: SpawnPlan | null = null;
+  private windAt: Wind;
   private nextId = 0;
   private rand: () => number = Math.random;
   private bloom = 40;
@@ -51,48 +45,56 @@ export class Garden {
   private pointer = { x: 0, y: 0, lastX: 0, lastY: 0, vx: 0, vy: 0, live: false };
   private spawnFrom: number | null = null;
 
+  constructor(private settings: FlowerSettings) {
+    this.windAt = createWind(settings.wind);
+  }
+
   layout({ width: W, height: H, cell, seed, density, spawn }: GardenLayout) {
     this.width = W;
     this.height = H;
     this.rand = createRandom(seed);
     const rand = this.rand;
+    const { flowerSize, stems, bouquet, meadow, grass } = this.settings.layout;
+    const { mix, tone, sway } = this.settings;
     this.plants = [];
     this.nextId = 0;
-    this.bloom = clamp(Math.min(W, H) * 0.055, 24, 68);
+    this.bloom = clamp(Math.min(W, H) * flowerSize.share, flowerSize.min, flowerSize.max);
     this.stemWidth = Math.max(cell * 0.55, Math.min(W, H) * 0.004);
-    this.hand = this.bloom * 0.55;
+    this.hand = this.bloom * this.settings.cursor.reach;
     // Counts depend on width only, so a phone's URL bar resizing the height doesn't reshuffle the bed.
-    const count = Math.round(clamp(W / 62, 10, 26) * density);
+    const count = Math.round(clamp(W / stems.spacing, stems.min, stems.max) * density);
 
     // The bouquet: heads land inside a quarter-ellipse from the corner, densest near it.
-    const reachX = W * 0.62;
-    const reachY = H * 0.74;
-    for (let i = 0; i < count; i++) {
+    const reachX = W * bouquet.reach[0];
+    const reachY = H * bouquet.reach[1];
+    const tallKinds = odds(mix.bouquet);
+    for (let i = 0; tallKinds.length && i < count; i++) {
       const depth = rand();
       const reach = 0.3 + 0.7 * Math.pow(rand(), 1.25);
       // Mostly along the diagonal, sometimes steeper or flatter.
       const theta = clamp(0.85 + (rand() + rand() + rand() - 1.5) * 0.5, 0.25, 1.45);
-      const rootX = W * (-0.03 + 0.3 * Math.pow(rand(), 1.8));
+      const rootX = W * (-0.03 + bouquet.roots * Math.pow(rand(), 1.8));
       const headX = Math.max(reachX * reach * Math.cos(theta), rootX + 15);
       const headY = H - reachY * reach * Math.sin(theta);
-      this.plant(this.pick(TALL), rootX, H + this.between(8, 40), headX, headY, depth, 1, reach > 0.5);
+      this.plant(this.pick(tallKinds), rootX, H + this.between(8, 40), headX, headY, depth, 1, reach > 0.5);
     }
 
     // The meadow: shorter and sparser the further right it goes.
-    const low = Math.round(count * 0.8);
-    for (let i = 0; i < low; i++) {
+    const low = Math.round(count * meadow.amount);
+    const shortKinds = odds(mix.meadow);
+    for (let i = 0; shortKinds.length && i < low; i++) {
       const depth = rand();
       const along = Math.pow(rand(), 1.15);
-      const rootX = W * (0.12 + 0.78 * along);
-      const tall = H * lerp(0.3, 0.07, along) * this.between(0.55, 1);
+      const rootX = W * lerp(meadow.span[0], meadow.span[1], along);
+      const tall = H * lerp(meadow.height[0], meadow.height[1], along) * this.between(0.55, 1);
       const headX = rootX + tall * this.between(0.05, 0.45);
-      this.plant(this.pick(SHORT), rootX, H + this.between(5, 25), headX, H - tall, depth, lerp(0.85, 0.6, along), false);
+      this.plant(this.pick(shortKinds), rootX, H + this.between(5, 25), headX, H - tall, depth, lerp(0.85, 0.6, along), false);
     }
 
     // Grass arching out of the corner, then in tufts along the bottom.
-    const blades = Math.round(count * 1.2);
+    const blades = Math.round(count * (grass.corner + grass.bottom));
     for (let i = 0; i < blades; i++) {
-      const corner = i < count * 0.7;
+      const corner = i < count * grass.corner;
       const depth = rand();
       const along = rand();
       const rootX = corner ? W * (-0.04 + 0.22 * Math.pow(rand(), 1.5)) : W * (0.1 + 0.8 * along);
@@ -101,9 +103,10 @@ export class Garden {
       const blade = this.curved(rootX, rootY, rootX + tall * this.between(0.25, 0.75), rootY - tall * this.between(0.55, 0.9), this.between(0.5, 0.9));
       blade.baseWidth = this.stemWidth * this.between(1.3, 2.2);
       blade.tipWidth = 0;
-      blade.tone = 0.4 + 0.3 * depth;
+      blade.tone = lerp(tone.grass[0], tone.grass[1], depth);
       blade.flex = this.between(0.13, 0.2);
-      blade.damping = 0.1;
+      blade.omega *= sway.speed;
+      blade.damping = sway.grassDamping;
       this.plants.push({ depth, stems: [blade], spawn: null });
     }
 
@@ -112,15 +115,13 @@ export class Garden {
     for (const p of this.plants) {
       for (const s of p.stems) {
         poseStem(s);
-        s.bend = s.flex * this.wind * windAt(s.x[SEGMENTS], s.y[SEGMENTS], this.time);
+        s.bend = s.flex * this.wind * this.windAt(s.x[SEGMENTS], s.y[SEGMENTS], this.time);
         poseStem(s);
       }
     }
     this.spawnFrom = null;
-    if (spawn) {
-      planSpawn(this.plants, W, H, seed);
-      this.spawnFrom = this.time;
-    }
+    this.spawnPlan = spawn ? planSpawn(this.plants, W, H, seed, this.settings.spawn) : null;
+    if (spawn) this.spawnFrom = this.time;
   }
 
   /** Seconds since the plants started growing in, or null once they're all in. */
@@ -131,12 +132,13 @@ export class Garden {
   /** Shows every plant fully grown straight away. */
   endSpawn() {
     this.spawnFrom = null;
+    this.spawnPlan = null;
   }
 
   step(dt: number) {
     this.time += dt;
     const t = this.time;
-    if (this.spawnFrom !== null && t - this.spawnFrom > SPAWN_TIME) this.spawnFrom = null;
+    if (this.spawnFrom !== null && t - this.spawnFrom > this.spawnPlan!.end) this.endSpawn();
     const p = this.pointer;
     let vx = 0;
     let vy = 0;
@@ -151,14 +153,15 @@ export class Garden {
       vy = p.vy;
     }
     const brushing = vx * vx + vy * vy > 25;
-    const fade = Math.exp(-dt / GUST_FADE);
-    const rise = 1 - Math.exp(-dt / GUST_RISE);
+    const { fade: fadeTime, rise: riseTime } = this.settings.cursor;
+    const fade = Math.exp(-dt / fadeTime);
+    const rise = 1 - Math.exp(-dt / riseTime);
     for (const plant of this.plants) {
       for (const s of plant.stems) {
         if (brushing) this.brush(s, vx, vy, dt);
         s.gust *= fade;
         s.breeze += (s.gust - s.breeze) * rise;
-        const target = s.flex * (this.wind * windAt(s.x[SEGMENTS], s.y[SEGMENTS], t) + s.breeze);
+        const target = s.flex * (this.wind * this.windAt(s.x[SEGMENTS], s.y[SEGMENTS], t) + s.breeze);
         s.bendVel += (s.omega * s.omega * (target - s.bend) - 2 * s.damping * s.omega * s.bendVel) * dt;
         s.bend += s.bendVel * dt;
         // Heads trail the stem's motion and lean a little further with the wind.
@@ -224,7 +227,8 @@ export class Garden {
     const a = s.angle[at];
     const across = (vx * Math.cos(a) + vy * Math.sin(a)) * dt;
     const catches = Math.sqrt((this.bloom * 8) / (s.segment * SEGMENTS));
-    s.gust = GUST_MAX * Math.tanh((s.gust + GUST * catches * grip * across) / GUST_MAX);
+    const { strength, limit } = this.settings.cursor;
+    s.gust = limit * Math.tanh((s.gust + strength * catches * grip * across) / limit);
   }
 
   private between(a: number, b: number) {
@@ -246,13 +250,16 @@ export class Garden {
 
   /** One flowering plant: a main stem with its head and leaves, and sometimes a side branch. */
   private plant(kind: Kind, rootX: number, rootY: number, headX: number, headY: number, depth: number, scale: number, tall: boolean) {
-    const sp = SPECIES[kind];
+    const { species, tone, sway } = this.settings;
+    const sp = species[kind];
     const main = this.curved(rootX, rootY, headX, headY, this.between(...sp.lean));
     const length = main.segment * SEGMENTS;
     main.baseWidth = this.stemWidth * sp.stem * this.between(1.1, 1.5);
     main.tipWidth = this.stemWidth * sp.stem * 0.75;
-    main.tone = 0.55 + 0.3 * depth;
+    main.tone = lerp(tone.stems[0], tone.stems[1], depth);
     main.flex = this.between(0.08, 0.13) * sp.flex * clamp(length / 400, 0.6, 1.4);
+    main.omega *= sway.speed;
+    main.damping = sway.damping;
     main.head = this.head(kind, depth, scale);
     if (kind === "bud" && this.rand() < 0.5) {
       // A nodding bud, its stem hooked over at the top like a poppy's.
@@ -282,7 +289,8 @@ export class Garden {
       branch.tipWidth = this.stemWidth * 0.7;
       branch.tone = main.tone;
       branch.flex = main.flex * 0.8;
-      branch.omega *= 1.4;
+      branch.omega *= 1.4 * sway.speed;
+      branch.damping = sway.damping;
       branch.head = this.rand() < 0.6 ? this.head(kind, depth, scale * 0.65) : this.head("bud", depth, scale);
       if (main.head && branch.head.kind === main.head.kind) {
         branch.head.ink = main.head.ink;
@@ -294,7 +302,8 @@ export class Garden {
   }
 
   private head(kind: Kind, depth: number, scale: number): Head {
-    const sp = SPECIES[kind];
+    const sp = this.settings.species[kind];
+    const tone = this.settings.tone.flowers;
     const [wm, wd, ww] = sp.inks;
     const r = this.rand() * (wm + wd + ww);
     const ink: Ink = r < wm ? 0 : r < wm + wd ? 1 : 2;
@@ -323,7 +332,7 @@ export class Garden {
       centre,
       blush: ink === 2 && this.rand() < 0.5,
       // Nearer flowers print darker, so the bed has depth. Plumes stay soft.
-      tone: (0.6 + 0.4 * depth) * (kind === "plume" ? 0.7 : 1),
+      tone: lerp(tone[0], tone[1], depth) * (kind === "plume" ? 0.7 : 1),
       jitter: Array.from({ length: Math.max(petals, 1) }, () => this.between(0.88, 1.08)),
       reach: kind === "plume" ? this.between(0.22, 0.35) : this.between(0.3, 0.5),
       style,
@@ -351,4 +360,9 @@ function pressure(d: number, hand: number) {
   const touch = d < hand ? (1 - Math.max(d, 0) / hand) ** 2 : 0;
   const air = d < hand * 3 ? 0.1 * (1 - Math.max(d, 0) / (hand * 3)) ** 2 : 0;
   return touch + air;
+}
+
+/** A mix as [kind, odds] pairs, leaving out the kinds it never grows. */
+function odds(mix: Mix) {
+  return (Object.entries(mix) as [Kind, number | undefined][]).filter((e): e is [Kind, number] => (e[1] ?? 0) > 0);
 }
