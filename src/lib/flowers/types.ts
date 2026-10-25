@@ -81,4 +81,14 @@ export interface Plant {
   depth: number;
   /** The main stem first, then its branches. */
   stems: Stem[];
+  /** How it grows in when the bed first appears, or null if it was there from the start. */
+  spawn: Spawn | null;
+}
+
+/** A front of growth climbing a plant from the ground up, at a steady pace. */
+export interface Spawn {
+  /** Seconds after the bed starts growing in that the front crosses the bottom of the screen. */
+  bottom: number;
+  /** Seconds the front takes to climb one px. */
+  pace: number;
 }

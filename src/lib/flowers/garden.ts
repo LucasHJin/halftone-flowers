@@ -7,6 +7,7 @@
  * drift back as unhurriedly as everything else.
  */
 import { clamp, createRandom, lerp, TAU } from "../../utils/math";
+import { planSpawn, SPAWN_TIME } from "./spawn";
 import { SHORT, SPECIES, TALL } from "./species";
 import { createStem, curvedStem, poseStem, SEGMENTS } from "./stem";
 import type { Head, Ink, Kind, Leaf, LeafShape, Plant, Stem } from "./types";
@@ -29,11 +30,15 @@ export interface GardenLayout {
   seed: number;
   /** Multiplier on the number of stems. */
   density: number;
+  /** Grow the plants in rather than have them there from the start. */
+  spawn: boolean;
 }
 
 export class Garden {
   plants: Plant[] = [];
   time = 0;
+  width = 0;
+  height = 0;
   /** Multiplier on how far the wind bends things. */
   wind = 1;
   private nextId = 0;
@@ -44,8 +49,11 @@ export class Garden {
   private hand = 30;
   /** Where the pointer is, where it was at the last step, and its smoothed velocity. */
   private pointer = { x: 0, y: 0, lastX: 0, lastY: 0, vx: 0, vy: 0, live: false };
+  private spawnFrom: number | null = null;
 
-  layout({ width: W, height: H, cell, seed, density }: GardenLayout) {
+  layout({ width: W, height: H, cell, seed, density, spawn }: GardenLayout) {
+    this.width = W;
+    this.height = H;
     this.rand = createRandom(seed);
     const rand = this.rand;
     this.plants = [];
@@ -96,7 +104,7 @@ export class Garden {
       blade.tone = 0.4 + 0.3 * depth;
       blade.flex = this.between(0.13, 0.2);
       blade.damping = 0.1;
-      this.plants.push({ depth, stems: [blade] });
+      this.plants.push({ depth, stems: [blade], spawn: null });
     }
 
     this.plants.sort((a, b) => a.depth - b.depth);
@@ -108,11 +116,27 @@ export class Garden {
         poseStem(s);
       }
     }
+    this.spawnFrom = null;
+    if (spawn) {
+      planSpawn(this.plants, W, H, seed);
+      this.spawnFrom = this.time;
+    }
+  }
+
+  /** Seconds since the plants started growing in, or null once they're all in. */
+  get growing() {
+    return this.spawnFrom === null ? null : this.time - this.spawnFrom;
+  }
+
+  /** Shows every plant fully grown straight away. */
+  endSpawn() {
+    this.spawnFrom = null;
   }
 
   step(dt: number) {
     this.time += dt;
     const t = this.time;
+    if (this.spawnFrom !== null && t - this.spawnFrom > SPAWN_TIME) this.spawnFrom = null;
     const p = this.pointer;
     let vx = 0;
     let vy = 0;
@@ -266,7 +290,7 @@ export class Garden {
       }
       stems.push(branch);
     }
-    this.plants.push({ depth, stems });
+    this.plants.push({ depth, stems, spawn: null });
   }
 
   private head(kind: Kind, depth: number, scale: number): Head {

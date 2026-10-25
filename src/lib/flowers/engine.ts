@@ -2,6 +2,7 @@ import { clamp } from "../../utils/math";
 import { DiamondHalftone, evenSizes, type HalftoneColors } from "../halftone";
 import { Garden } from "./garden";
 import { paintGarden } from "./paint";
+import { spawnScale } from "./spawn";
 
 const STEP = 1 / 60;
 const MAX_STEPS = 4;
@@ -32,8 +33,8 @@ export interface FlowerFieldOptions {
 
 /**
  * Grows a garden on a canvas and keeps it swaying: fixed-timestep loop,
- * re-layout on resize, pointer brushing, pausing off-screen, and a still frame
- * for prefers-reduced-motion.
+ * growing in on first show, re-layout on resize, pointer brushing, pausing
+ * off-screen, and a still frame for prefers-reduced-motion.
  */
 export class FlowerEngine {
   private garden = new Garden();
@@ -87,8 +88,12 @@ export class FlowerEngine {
   }
 
   private draw() {
-    paintGarden(this.halftone.beginScene(), this.garden);
-    this.halftone.present();
+    const { garden, halftone } = this;
+    paintGarden(halftone.beginScene(), garden);
+    const growing = garden.growing;
+    if (growing === null) return halftone.present();
+    paintGarden(halftone.beginReveal(), garden, true);
+    halftone.present(spawnScale(growing, garden.height));
   }
 
   private resize() {
@@ -100,8 +105,10 @@ export class FlowerEngine {
     this.halftone.resize(rect.width, rect.height, dpr);
     const key = `${rect.width}x${rect.height}`;
     if (key !== this.laidOut) {
+      // Only the first layout grows in; after a resize the bed is just there.
+      const spawn = !this.laidOut && !this.reducedMotion.matches;
       this.laidOut = key;
-      this.garden.layout({ width: rect.width, height: rect.height, cell, seed: this.seed, density: this.options.density ?? 1 });
+      this.garden.layout({ width: rect.width, height: rect.height, cell, seed: this.seed, density: this.options.density ?? 1, spawn });
     }
     // Resizing clears the canvas; without the animation loop, nothing else would redraw it.
     if (this.reducedMotion.matches) this.draw();
@@ -132,6 +139,7 @@ export class FlowerEngine {
   private onMotionPreference = () => {
     if (this.reducedMotion.matches) {
       cancelAnimationFrame(this.raf);
+      this.garden.endSpawn();
       this.draw();
     } else {
       this.schedule();

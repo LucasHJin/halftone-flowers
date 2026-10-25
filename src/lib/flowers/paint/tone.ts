@@ -3,10 +3,23 @@ import { clamp, lerp, TAU } from "../../../utils/math";
 import { SEGMENTS } from "../stem";
 import type { Ink, Stem } from "../types";
 
+let mask: string | null = null;
+
 /** Fill style for `amount` of one ink: red is main, green dark, blue white. */
 export function tone(ink: Ink, amount: number) {
+  if (mask) return mask;
   const v = Math.round(clamp(amount, 0, 1) * 255);
   return ink === 0 ? `rgb(${v},0,0)` : ink === 1 ? `rgb(0,${v},0)` : `rgb(0,0,${v})`;
+}
+
+/** Runs `paint` with every fill and stroke in one flat colour instead of its inks, to draw a mask. */
+export function inMask(colour: string, paint: () => void) {
+  mask = colour;
+  try {
+    paint();
+  } finally {
+    mask = null;
+  }
 }
 
 const at = { x: 0, y: 0, a: 0 };

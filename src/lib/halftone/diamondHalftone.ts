@@ -6,12 +6,21 @@
  * of SS × SS pixels. Each diamond then averages its pixels into one tone, picks
  * one of a few dot sizes (an ordered dither chooses between the two nearest
  * sizes), and takes the colour of whichever ink covers more of it.
+ *
+ * A second hidden canvas, the reveal, can be laid out the same way to scale
+ * each dot, for animating dots in. What its colours mean is up to the caller.
  */
 import { clamp } from "../../utils/math";
 
 /** Samples per diamond along each lattice axis. */
 const SS = 2;
 const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+
+/**
+ * Size multiplier for the dot of diamond (i, j), centred at (x, y), from the
+ * reveal canvas's average colour over it, each channel 0–255.
+ */
+export type DotScale = (r: number, g: number, b: number, x: number, y: number, i: number, j: number) => number;
 
 export interface HalftoneColors {
   background: string;
@@ -38,6 +47,8 @@ export class DiamondHalftone {
   private ctx: CanvasRenderingContext2D;
   private scene = document.createElement("canvas");
   private sctx: CanvasRenderingContext2D;
+  private reveal: HTMLCanvasElement | null = null;
+  private rctx: CanvasRenderingContext2D | null = null;
   private width = 0;
   private height = 0;
   private dpr = 1;
@@ -72,20 +83,38 @@ export class DiamondHalftone {
 
   /** Clears the hidden canvas and returns it, set up so you draw in CSS px. */
   beginScene() {
-    const { sctx, cell: w } = this;
-    sctx.setTransform(1, 0, 0, 1, 0, 0);
-    sctx.fillStyle = "#000";
-    sctx.fillRect(0, 0, this.scene.width, this.scene.height);
-    // u = (x + y) / w and v = (y - x) / w, offset so cell iu0 starts at pixel 0.
-    const k = SS / w;
-    sctx.setTransform(k, -k, k, k, (0.5 - this.iu0) * SS, (0.5 - this.iv0) * SS);
-    return sctx;
+    return this.begin(this.sctx);
   }
 
-  /** Halftones whatever was drawn since beginScene onto the visible canvas. */
-  present() {
+  /** Clears the reveal canvas and returns it, laid out like the scene. Only read when `present` is given a scale. */
+  beginReveal() {
+    if (!this.reveal) {
+      this.reveal = document.createElement("canvas");
+      this.rctx = this.reveal.getContext("2d", { willReadFrequently: true });
+      if (!this.rctx) throw new Error("2D canvas unavailable");
+    }
+    if (this.reveal.width !== this.scene.width || this.reveal.height !== this.scene.height) {
+      this.reveal.width = this.scene.width;
+      this.reveal.height = this.scene.height;
+    }
+    return this.begin(this.rctx!);
+  }
+
+  private begin(c: CanvasRenderingContext2D) {
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.fillStyle = "#000";
+    c.fillRect(0, 0, c.canvas.width, c.canvas.height);
+    // u = (x + y) / w and v = (y - x) / w, offset so cell iu0 starts at pixel 0.
+    const k = SS / this.cell;
+    c.setTransform(k, -k, k, k, (0.5 - this.iu0) * SS, (0.5 - this.iv0) * SS);
+    return c;
+  }
+
+  /** Halftones whatever was drawn since beginScene onto the visible canvas, each dot scaled by `scale` if given. */
+  present(scale?: DotScale) {
     const { ctx, cell, sizes, nu, nv, iu0, iv0 } = this;
     const data = this.sctx.getImageData(0, 0, this.scene.width, this.scene.height).data;
+    const mask = scale && this.rctx ? this.rctx.getImageData(0, 0, this.scene.width, this.scene.height).data : null;
     const stride = this.scene.width * 4;
     const steps = sizes.length;
     const half = cell / 2;
@@ -119,7 +148,23 @@ export class DiamondHalftone {
         let step = Math.floor(level);
         if (level - step > (BAYER4[(i & 3) | ((j & 3) << 2)] + 0.5) / 16) step++;
         if (step <= 0) continue;
-        const r = half * sizes[clamp(step, 1, steps) - 1];
+        let r = half * sizes[clamp(step, 1, steps) - 1];
+        if (mask) {
+          let mr = 0;
+          let mg = 0;
+          let mb = 0;
+          for (let sy = 0; sy < SS; sy++) {
+            let p = (cj * SS + sy) * stride + ci * SS * 4;
+            for (let sx = 0; sx < SS; sx++, p += 4) {
+              mr += mask[p];
+              mg += mask[p + 1];
+              mb += mask[p + 2];
+            }
+          }
+          const n = SS * SS;
+          r *= scale!(mr / n, mg / n, mb / n, x, y, i, j);
+          if (r < 0.1) continue;
+        }
         const path = m >= d && m >= w ? inkPath : d >= w ? darkPath : lightPath;
         path.moveTo(x, y - r);
         path.lineTo(x + r, y);
