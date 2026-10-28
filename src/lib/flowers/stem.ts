@@ -39,16 +39,28 @@ export function createStem(id: number, rootX: number, rootY: number, segment: nu
 }
 
 /**
- * A stem from the root to the head that rises first and then arcs over,
- * leaning `lean` radians further right at the top than the straight line between them.
+ * A stem from the root to the head, its top leaning `lean` radians further
+ * right than the straight line between them. With `lean` positive it rises
+ * first and arcs over; negative, it sets off leaning out and curves up.
  */
 export function curvedStem(id: number, x0: number, y0: number, x3: number, y3: number, lean: number, rand: () => number) {
   const dx = x3 - x0;
   const dy = y3 - y0;
   const dist = Math.hypot(dx, dy);
-  const x1 = x0 + dx * lerp(-0.05, 0.2, rand());
-  const y1 = Math.max(y0 - dist * lerp(0.35, 0.55, rand()), y3 - dist * 0.15);
-  const tipAngle = clamp(Math.atan2(dx, -dy) + lean, -0.3, 1.7);
+  const chord = Math.atan2(dx, -dy);
+  let x1: number;
+  let y1: number;
+  if (lean >= 0) {
+    x1 = x0 + dx * lerp(-0.05, 0.2, rand());
+    y1 = Math.max(y0 - dist * lerp(0.35, 0.55, rand()), y3 - dist * 0.15);
+  } else {
+    // Sets off as far outside the line as the top ends up inside it.
+    const out = clamp(chord - lean, -1.4, 1.4);
+    const reach = dist * lerp(0.3, 0.45, rand());
+    x1 = x0 + Math.sin(out) * reach;
+    y1 = y0 - Math.cos(out) * reach;
+  }
+  const tipAngle = clamp(chord + lean, -0.3, 1.7);
   const x2 = x3 - Math.sin(tipAngle) * dist * 0.3;
   const y2 = y3 + Math.cos(tipAngle) * dist * 0.3;
 

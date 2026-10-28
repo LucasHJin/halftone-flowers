@@ -11,12 +11,14 @@ export function paintSpike(ctx: CanvasRenderingContext2D, s: Stem, h: Head) {
     if (h.style === 2 && i % 2 === 1 && i < n - 3) continue;
     const k = i / (n - 1);
     const p = along(s, start + (1 - start) * k * 0.96);
-    const size = h.radius * lerp(1, 0.4, k);
+    const size = h.radius * lerp(1, 0.4, k) * h.jitter[i];
     // Open florets low down, tighter and deeper-coloured buds toward the tip.
     const amount = h.tone * lerp(0.82, 1, k);
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(p.a);
+    // Florets crowd a little to one side or the other.
+    ctx.translate(h.drift[i] * size, 0);
     ctx.fillStyle = tone(h.ink, amount);
     if (h.style === 0) {
       for (const side of [-1, 1]) blob(ctx, side * size * 0.75, 0, size * 0.8, size * 0.6, side * 0.5);

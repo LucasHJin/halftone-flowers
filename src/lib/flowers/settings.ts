@@ -15,6 +15,8 @@ export interface LayoutSettings {
   bouquet: {
     /** How far heads reach from the bottom-left corner, as shares of the width and height. */
     reach: [number, number];
+    /** How close to the corner heads can land, as a share of `reach`. */
+    inner: number;
     /** How far right of the corner roots spread, as a share of the width. */
     roots: number;
   };
@@ -25,6 +27,10 @@ export interface LayoutSettings {
     span: [number, number];
     /** How tall it grows at its left and right ends, as shares of the height. */
     height: [number, number];
+    /** How far right of its root each head sits, as a share of its height, picked from this range. Negative leans back against the wind. */
+    slant: [number, number];
+    /** How far each stem, and each tuft of grass along the bottom, strays from evenly spaced: 0 none, 1 anywhere in its own share of the span, 2 into its neighbours'. */
+    scatter: number;
   };
   grass: {
     /** Blades arching out of the corner, per tall stem. */
@@ -32,6 +38,8 @@ export interface LayoutSettings {
     /** Blades in tufts along the bottom, per tall stem. */
     bottom: number;
   };
+  /** Share of stems and blades that set off leaning out and curve up toward the tip, instead of rising and arching over. */
+  curveUp: number;
 }
 
 /** Odds of each kind; leave a kind out or give it 0 to never grow it. */
@@ -129,14 +137,15 @@ export const DEFAULT_SETTINGS: FlowerSettings = {
   layout: {
     flowerSize: { share: 0.055, min: 24, max: 68 },
     stems: { spacing: 62, min: 10, max: 26 },
-    bouquet: { reach: [0.62, 0.74], roots: 0.3 },
-    meadow: { amount: 0.8, span: [0.12, 0.9], height: [0.3, 0.07] },
-    grass: { corner: 0.7, bottom: 0.5 },
+    bouquet: { reach: [0.62, 0.74], inner: 0.42, roots: 0.3 },
+    meadow: { amount: 0.8, span: [0.14, 0.92], height: [0.27, 0.08], slant: [-0.25, 0.95], scatter: 0.8 },
+    grass: { corner: 0.7, bottom: 0.9 },
+    curveUp: 0.35,
   },
   species: SPECIES,
   mix: { bouquet: BOUQUET_MIX, meadow: MEADOW_MIX },
   tone: { flowers: [0.6, 1], stems: [0.55, 0.85], grass: [0.4, 0.7] },
-  shade: { depth: 0.15, jitter: 0.12 },
+  shade: { depth: 0.19, jitter: 0.09 },
   wind: {
     lean: 0.3,
     waves: [

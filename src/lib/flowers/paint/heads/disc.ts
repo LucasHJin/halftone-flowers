@@ -16,14 +16,15 @@ export function paintDisc(ctx: CanvasRenderingContext2D, s: Stem, h: Head, t: nu
   const R = h.radius;
   // A tilted flower sits up off the end of the stem.
   ctx.translate(0, -R * (0.12 + 0.3 * (1 - h.face)));
-  ctx.scale(1, h.face);
+  // Flattened toward the stem, and slanted when the head is turned about it (see headFrame).
+  ctx.transform(Math.cos(h.turn), 0, Math.sqrt(1 - h.face * h.face) * Math.sin(h.turn), h.face, 0, 0);
   const n = h.petals;
   for (let k = 0; k < n; k++) {
     // Lilies have an outer ring of three and an inner ring of three, drawn on top and a little shorter.
     const lily = h.kind === "lily";
     const ring = lily ? Math.floor((k * 2) / n) : 0;
     const slot = lily ? (k % (n / 2)) * 2 + ring : k;
-    const phi = h.spin + (slot / n) * TAU;
+    const phi = h.spin + ((slot + h.drift[k]) / n) * TAU;
     const len = R * h.jitter[k] * (ring ? 0.82 : 1) * (1 + 0.025 * Math.sin(t * 1.6 + k * 1.9 + s.id));
     // Petals on the far side of a tilted flower print a little lighter.
     const amount = h.tone * (0.92 + 0.08 * Math.sin(phi)) * (0.94 + 0.06 * h.jitter[k]) * (ring ? 1.06 : 1);

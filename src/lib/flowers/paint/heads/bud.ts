@@ -4,6 +4,8 @@ import { tone } from "../tone";
 export function paintBud(ctx: CanvasRenderingContext2D, s: Stem, h: Head) {
   const L = h.radius * 1.1;
   const w = h.radius * 0.55;
+  // Its tip leans the way the head is turned.
+  ctx.transform(1, 0, -0.4 * Math.sin(h.turn), 1, 0, 0);
   ctx.beginPath();
   ctx.moveTo(0, 0.05 * L);
   ctx.bezierCurveTo(-w, -0.1 * L, -w * 0.7, -0.75 * L, 0, -L);

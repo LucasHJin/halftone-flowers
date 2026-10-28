@@ -23,8 +23,12 @@ import { paintBud } from "./heads/bud";
 import { paintCluster } from "./heads/cluster";
 import { paintCup } from "./heads/cup";
 import { paintDisc } from "./heads/disc";
+import { paintGlobe } from "./heads/globe";
+import { paintIris } from "./heads/iris";
 import { paintPlume } from "./heads/plume";
+import { paintReflexed } from "./heads/reflexed";
 import { paintSpike } from "./heads/spike";
+import { paintTrumpet } from "./heads/trumpet";
 import { inMask, inShade } from "./tone";
 
 /** Paints the garden's tone image, or with `mask`, the spawn mask in the same shapes. */
@@ -83,6 +87,18 @@ function paintHead(ctx: CanvasRenderingContext2D, s: Stem, t: number) {
     case "tulip":
     case "rose":
       paintCup(ctx, h);
+      break;
+    case "turksCap":
+      paintReflexed(ctx, h);
+      break;
+    case "daffodil":
+      paintTrumpet(ctx, h);
+      break;
+    case "peony":
+      paintGlobe(ctx, h);
+      break;
+    case "iris":
+      paintIris(ctx, h);
       break;
     default:
       paintDisc(ctx, s, h, t);

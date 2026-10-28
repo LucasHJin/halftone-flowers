@@ -61,7 +61,7 @@ export class Garden {
     this.height = H;
     this.rand = createRandom(seed);
     const rand = this.rand;
-    const { flowerSize, stems, bouquet, meadow, grass } = this.settings.layout;
+    const { flowerSize, stems, bouquet, meadow, grass, curveUp } = this.settings.layout;
     const { mix, tone } = this.settings;
     this.plants = [];
     this.nextId = 0;
@@ -77,7 +77,7 @@ export class Garden {
     const tallKinds = odds(mix.bouquet);
     for (let i = 0; tallKinds.length && i < count; i++) {
       const depth = rand();
-      const reach = 0.3 + 0.7 * Math.pow(rand(), 1.25);
+      const reach = bouquet.inner + (1 - bouquet.inner) * Math.pow(rand(), 1.25);
       // Mostly along the diagonal, sometimes steeper or flatter.
       const theta = clamp(0.85 + (rand() + rand() + rand() - 1.5) * 0.5, 0.25, 1.45);
       const rootX = W * (-0.03 + bouquet.roots * Math.pow(rand(), 1.8));
@@ -86,28 +86,34 @@ export class Garden {
       this.plant(this.pick(tallKinds), rootX, H + this.between(8, 40), headX, headY, depth, 1, reach > 0.5);
     }
 
-    // The meadow: shorter and sparser the further right it goes.
+    // The meadow: each stem somewhere near its own share of the span, shorter the further right it goes.
     const low = Math.round(count * meadow.amount);
     const shortKinds = odds(mix.meadow);
     for (let i = 0; shortKinds.length && i < low; i++) {
       const depth = rand();
-      const along = Math.pow(rand(), 1.15);
+      const along = clamp((i + 0.5 + (rand() - 0.5) * meadow.scatter) / low, 0, 1);
       const rootX = W * lerp(meadow.span[0], meadow.span[1], along);
       const tall = H * lerp(meadow.height[0], meadow.height[1], along) * this.between(0.55, 1);
-      const headX = rootX + tall * this.between(0.05, 0.45);
+      const headX = rootX + tall * this.between(...meadow.slant);
       this.plant(this.pick(shortKinds), rootX, H + this.between(5, 25), headX, H - tall, depth, lerp(0.85, 0.6, along), false);
     }
 
-    // Grass arching out of the corner, then in tufts along the bottom.
-    const blades = Math.round(count * (grass.corner + grass.bottom));
-    for (let i = 0; i < blades; i++) {
-      const corner = i < count * grass.corner;
+    // Grass arching out of the corner, then in tufts of three fanning out, spread along the bottom like the meadow.
+    const corner = Math.round(count * grass.corner);
+    const bottom = Math.round(count * grass.bottom);
+    const tufts = Math.ceil(bottom / 3);
+    let along = 0;
+    for (let i = 0; i < corner + bottom; i++) {
+      const inCorner = i < corner;
       const depth = rand();
-      const along = rand();
-      const rootX = corner ? W * (-0.04 + 0.22 * Math.pow(rand(), 1.5)) : W * (0.1 + 0.8 * along);
-      const tall = corner ? H * this.between(0.18, 0.5) : H * lerp(0.18, 0.05, along) * this.between(0.6, 1);
+      const tuft = (i - corner) / 3;
+      if (Number.isInteger(tuft)) along = clamp((tuft + 0.5 + (rand() - 0.5) * meadow.scatter) / tufts, 0, 1);
+      const rootX = inCorner ? W * (-0.04 + 0.22 * Math.pow(rand(), 1.5)) : W * (0.1 + 0.8 * along) + this.between(-1, 1) * this.stemWidth * 2;
+      const tall = inCorner ? H * this.between(0.18, 0.5) : H * lerp(0.2, 0.09, along) * this.between(0.6, 1);
       const rootY = H + this.between(5, 30);
-      const blade = this.curved(rootX, rootY, rootX + tall * this.between(0.25, 0.75), rootY - tall * this.between(0.55, 0.9), this.between(0.5, 0.9));
+      const out = inCorner ? this.between(0.25, 0.75) : this.between(-0.35, 0.75);
+      const lean = this.rand() < curveUp ? -this.between(0.25, 0.6) : this.between(0.5, 0.9);
+      const blade = this.curved(rootX, rootY, rootX + tall * out, rootY - tall * this.between(0.55, 0.9), lean);
       blade.baseWidth = this.stemWidth * this.between(1.3, 2.2);
       blade.tipWidth = 0;
       blade.tone = lerp(tone.grass[0], tone.grass[1], depth);
@@ -261,18 +267,15 @@ export class Garden {
   private plant(kind: Kind, rootX: number, rootY: number, headX: number, headY: number, depth: number, scale: number, tall: boolean) {
     const { species, tone } = this.settings;
     const sp = species[kind];
-    const main = this.curved(rootX, rootY, headX, headY, this.between(...sp.lean));
+    const lean = this.rand() < this.settings.layout.curveUp ? -this.between(0.15, 0.5) : this.between(...sp.lean);
+    const main = this.curved(rootX, rootY, headX, headY, lean);
     const length = main.segment * SEGMENTS;
     main.baseWidth = this.stemWidth * sp.stem * this.between(1.1, 1.5);
     main.tipWidth = this.stemWidth * sp.stem * 0.75;
     main.tone = lerp(tone.stems[0], tone.stems[1], depth);
     main.flex = this.between(0.08, 0.13) * sp.flex * clamp(length / 400, 0.6, 1.4);
     main.head = this.head(kind, depth, scale);
-    if (kind === "bud" && this.rand() < 0.5) {
-      // A nodding bud, its stem hooked over at the top like a poppy's.
-      const hook = this.between(1.6, 2.4);
-      for (let k = SEGMENTS - 5; k < SEGMENTS; k++) main.rest[k] += hook * Math.pow((k - SEGMENTS + 6) / 5, 1.5);
-    }
+    this.droop(main);
 
     const leaves = Math.round(this.between(sp.leaves[0], sp.leaves[1] + 0.49));
     let side = this.rand() < 0.5 ? -1 : 1;
@@ -302,6 +305,7 @@ export class Garden {
         branch.head.ink = main.head.ink;
         branch.head.centre = main.head.centre;
       }
+      this.droop(branch);
       stems.push(branch);
     }
     this.plants.push({ depth, stems, spawn: null });
@@ -314,13 +318,18 @@ export class Garden {
     const r = this.rand() * (wm + wd + ww);
     const ink: Ink = r < wm ? 0 : r < wm + wd ? 1 : 2;
     // Centres contrast with the petals: dark on pink, white on dark poppies, pink or dark on white.
-    const centre: Ink = ink === 0 ? 1 : ink === 1 ? (kind === "poppy" ? 2 : 0) : this.rand() < 0.6 ? 0 : 1;
+    let centre: Ink = ink === 0 ? 1 : ink === 1 ? (kind === "poppy" ? 2 : 0) : this.rand() < 0.6 ? 0 : 1;
+    // Many daffodils have a trumpet the same colour as their petals.
+    if (kind === "daffodil" && this.rand() < 0.35) centre = ink;
     let petals = 0;
     let style = 0;
     if (kind === "cosmos") petals = 7 + Math.floor(this.rand() * 3);
     else if (kind === "daisy") petals = 13 + Math.floor(this.rand() * 9);
-    else if (kind === "lily") petals = 6;
+    else if (kind === "lily" || kind === "turksCap" || kind === "daffodil" || kind === "iris") petals = 6;
     else if (kind === "poppy") petals = 4;
+    else if (kind === "tulip") petals = 3;
+    // One per petal in paintGlobe's rings.
+    else if (kind === "peony") petals = 28;
     else if (kind === "cluster") {
       petals = 5 + Math.floor(this.rand() * 5);
       style = this.rand() < 0.5 ? 1 : 0;
@@ -334,15 +343,32 @@ export class Garden {
       petals,
       face: clamp(this.between(...sp.face), 0.05, 1),
       spin: this.rand() * TAU,
+      turn: this.between(-1, 1) * sp.turn,
       ink,
       centre,
       blush: ink === 2 && this.rand() < 0.5,
       // Nearer flowers print darker, so the bed has depth. Plumes stay soft.
       tone: lerp(tone[0], tone[1], depth) * (kind === "plume" ? 0.7 : 1),
-      jitter: Array.from({ length: Math.max(petals, 1) }, () => this.between(0.88, 1.08)),
+      jitter: Array.from({ length: Math.max(petals, 1) }, () => this.between(1 - sp.ragged, 1 + sp.ragged * 0.7)),
+      drift: Array.from({ length: Math.max(petals, 1) }, () => this.between(-1, 1) * sp.drift),
       reach: kind === "plume" ? this.between(0.22, 0.35) : this.between(0.3, 0.5),
       style,
     };
+  }
+
+  /** Hooks the top of a stem over for heads that nod or hang, so they face out or down. */
+  private droop(s: Stem) {
+    const kind = s.head?.kind;
+    let hook = 0;
+    if (kind === "turksCap") hook = this.between(2.3, 2.9);
+    else if (kind === "daffodil") hook = this.between(1, 1.5);
+    else if (kind === "peony") hook = this.between(0.15, 0.5);
+    // Half of buds nod, hooked over like a poppy's.
+    else if (kind === "bud" && this.rand() < 0.5) hook = this.between(1.6, 2.4);
+    if (!hook) return;
+    // Most hook over with the wind, some back against it.
+    if (this.rand() < 0.3) hook = -hook;
+    for (let k = SEGMENTS - 5; k < SEGMENTS; k++) s.rest[k] += hook * Math.pow((k - SEGMENTS + 6) / 5, 1.5);
   }
 
   private leaf(shape: LeafShape, side: number, stemLength: number): Leaf {

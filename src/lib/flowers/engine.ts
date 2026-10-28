@@ -19,17 +19,17 @@ export const DEFAULT_COLORS: HalftoneColors = {
 export interface FlowerFieldOptions {
   /** Diamond width in CSS px. Default scales with the width, from 5 to 10. */
   cell?: number;
-  /** How many dot sizes to use, evenly spaced. Default 5. */
+  /** How many dot sizes to use, evenly spaced. Default 6. */
   steps?: number;
   /** Dot sizes as a share of a full diamond, by area, smallest first. Overrides `steps`. */
   sizes?: number[];
   /** Background, and the colour ramp from `light` through `ink` to `dark` that every dot takes a shade of. */
   colors?: Partial<HalftoneColors>;
-  /** How many shades the colour ramp is split into. Default 9. */
+  /** How many shades the colour ramp is split into. Default 15. */
   shades?: number;
   /** How far ink spreads before it sets, as a share of a diamond's width: dots blur and are cut back sharp, so near ones run together. Default 0.1; 0 keeps every dot round. */
   spread?: number;
-  /** Where spread ink is cut back, from 0 to 1: lower keeps more of it, so dots swell and merge more. Default 0.3. */
+  /** Where spread ink is cut back, from 0 to 1: lower keeps more of it, so dots swell and merge more. Default 0.26. */
   threshold?: number;
   /** Multiplier on how far the wind bends the stems. Default 1. */
   wind?: number;
@@ -125,10 +125,10 @@ export class FlowerEngine {
 
   /** Dot sizes, shades and ink spread from the options. `applyInk` or a resize puts the spread on the canvas. */
   private setDots({ sizes, steps, shades, spread, threshold }: FlowerFieldOptions) {
-    this.halftone.sizes = sizes?.length ? sizes : evenSizes(steps ?? 5);
-    this.halftone.shades = shades ?? 9;
+    this.halftone.sizes = sizes?.length ? sizes : evenSizes(steps ?? 6);
+    this.halftone.shades = shades ?? 15;
     this.halftone.spread = spread ?? 0.1;
-    this.halftone.threshold = threshold ?? 0.3;
+    this.halftone.threshold = threshold ?? 0.26;
   }
 
   private draw() {

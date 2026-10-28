@@ -69,6 +69,9 @@ function speciesDials(sp: Species) {
     leaf: { type: "select", options: LEAVES, default: sp.leaf },
     faceMin: slider(sp.face[0], 0, 1, 0.01),
     faceMax: slider(sp.face[1], 0, 1, 0.01),
+    turn: slider(sp.turn, 0, 1, 0.01),
+    drift: slider(sp.drift, 0, 0.5, 0.01),
+    ragged: slider(sp.ragged, 0, 0.5, 0.01),
     branches: sp.branches,
   } satisfies DialConfig;
 }
@@ -104,7 +107,7 @@ const CONFIG = {
   },
   shade: {
     _collapsed: true,
-    shades: slider(9, 1, 25, 2),
+    shades: slider(15, 1, 25, 2),
     depth: slider(shade.depth, 0, 1, 0.01),
     jitter: slider(shade.jitter, 0, 0.5, 0.01),
   },
@@ -112,9 +115,9 @@ const CONFIG = {
     _collapsed: true,
     autoCell: true,
     cell: slider(8, 3, 20, 1),
-    steps: slider(5, 1, 10, 1),
+    steps: slider(6, 1, 10, 1),
     spread: slider(0.1, 0, 0.5, 0.01),
-    threshold: slider(0.3, 0.05, 0.95, 0.01),
+    threshold: slider(0.26, 0.05, 0.95, 0.01),
   },
   wind: {
     _collapsed: true,
@@ -163,6 +166,7 @@ const CONFIG = {
     bouquet: {
       reachAcross: slider(layout.bouquet.reach[0], 0.1, 1, 0.01),
       reachUp: slider(layout.bouquet.reach[1], 0.1, 1, 0.01),
+      inner: slider(layout.bouquet.inner, 0, 0.9, 0.01),
       roots: slider(layout.bouquet.roots, 0, 1, 0.01),
     },
     meadow: {
@@ -171,11 +175,15 @@ const CONFIG = {
       spanEnd: slider(layout.meadow.span[1], 0, 1, 0.01),
       heightLeft: slider(layout.meadow.height[0], 0, 0.8, 0.01),
       heightRight: slider(layout.meadow.height[1], 0, 0.8, 0.01),
+      slantMin: slider(layout.meadow.slant[0], -1.5, 2, 0.05),
+      slantMax: slider(layout.meadow.slant[1], -1.5, 2, 0.05),
+      scatter: slider(layout.meadow.scatter, 0, 2, 0.05),
     },
     grass: {
       corner: slider(layout.grass.corner, 0, 2, 0.05),
       bottom: slider(layout.grass.bottom, 0, 2, 0.05),
     },
+    curveUp: slider(layout.curveUp, 0, 1, 0.01),
   },
   tone: {
     _collapsed: true,
@@ -208,6 +216,9 @@ function toSpecies(d: ResolvedValues<ReturnType<typeof speciesDials>>): Species 
     leaves: [d.leavesMin, d.leavesMax],
     leaf: d.leaf as LeafShape,
     face: [d.faceMin, d.faceMax],
+    turn: d.turn,
+    drift: d.drift,
+    ragged: d.ragged,
     branches: d.branches,
   };
 }
@@ -232,13 +243,16 @@ function toOptions(v: Values, seed: number): FlowerFieldOptions {
       layout: {
         flowerSize: { share: layout.flowerSize.share, min: layout.flowerSize.min, max: layout.flowerSize.max },
         stems: { spacing: layout.stems.spacing, min: layout.stems.min, max: layout.stems.max },
-        bouquet: { reach: [layout.bouquet.reachAcross, layout.bouquet.reachUp], roots: layout.bouquet.roots },
+        bouquet: { reach: [layout.bouquet.reachAcross, layout.bouquet.reachUp], inner: layout.bouquet.inner, roots: layout.bouquet.roots },
         meadow: {
           amount: layout.meadow.amount,
           span: [layout.meadow.spanStart, layout.meadow.spanEnd],
           height: [layout.meadow.heightLeft, layout.meadow.heightRight],
+          slant: [layout.meadow.slantMin, layout.meadow.slantMax],
+          scatter: layout.meadow.scatter,
         },
         grass: { corner: layout.grass.corner, bottom: layout.grass.bottom },
+        curveUp: layout.curveUp,
       },
       species: perKind((kind) => toSpecies(v.species[kind])),
       mix: {

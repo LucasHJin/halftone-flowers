@@ -1,7 +1,21 @@
 /** Where on the colour ramp a part starts, before its plant's shade moves it: 0 the middle (main ink), 1 the dark end, 2 the light end. */
 export type Ink = 0 | 1 | 2;
 
-export type Kind = "cosmos" | "daisy" | "lily" | "poppy" | "tulip" | "rose" | "bud" | "spike" | "plume" | "cluster";
+export type Kind =
+  | "cosmos"
+  | "daisy"
+  | "lily"
+  | "poppy"
+  | "tulip"
+  | "rose"
+  | "bud"
+  | "spike"
+  | "plume"
+  | "cluster"
+  | "turksCap"
+  | "daffodil"
+  | "peony"
+  | "iris";
 
 export type LeafShape = "lance" | "strap" | "oval";
 
@@ -15,14 +29,18 @@ export interface Head {
   face: number;
   /** Rotation of the petal ring. */
   spin: number;
+  /** Radians the face is turned about the stem, toward the head's right if positive. */
+  turn: number;
   ink: Ink;
-  /** Ink of the flower's centre, or the blush at a white petal's base. */
+  /** Ink of the flower's centre (a daffodil's trumpet, an iris's falls), or the blush at a white petal's base. */
   centre: Ink;
   /** White petals that blush toward `centre` at the base. */
   blush: boolean;
   tone: number;
   /** Per-petal length variation, one per petal. */
   jitter: number[];
+  /** Per-petal shift off even spacing, as a share of the gap between petals. */
+  drift: number[];
   /** Spikes and plumes: the share of the stem they cover. */
   reach: number;
   /** Spikes: 0 lupine, 1 foxglove, 2 lavender. Clusters: 1 forks the pedicels. */

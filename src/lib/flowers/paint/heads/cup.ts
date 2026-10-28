@@ -22,6 +22,8 @@ export function paintCup(ctx: CanvasRenderingContext2D, h: Head) {
   const ry = rim * sinT;
   const amount = h.tone;
   const crinkle = h.kind === "poppy" ? 0.06 : 0;
+  // A head turned about its stem leans a little to one side.
+  ctx.transform(1, 0, -0.3 * Math.sin(h.turn), 1, 0, 0);
 
   if (h.kind === "rose") {
     // Sepals curling down from under the bloom.
@@ -40,7 +42,7 @@ export function paintCup(ctx: CanvasRenderingContext2D, h: Head) {
     for (const side of [-1, 1]) {
       ctx.beginPath();
       ctx.moveTo(side * rim * 0.2, top + ry * 0.2);
-      ctx.quadraticCurveTo(side * rim * 1.05, top, side * rim * 0.95, top - R * 0.32);
+      ctx.quadraticCurveTo(side * rim * 1.05, top, side * rim * 0.95, top - R * 0.32 * h.jitter[(side + 1) / 2]);
       ctx.quadraticCurveTo(side * rim * 1.1, top + R * 0.2, side * widest * 0.9, yW);
       ctx.fill();
     }
@@ -118,7 +120,7 @@ export function paintCup(ctx: CanvasRenderingContext2D, h: Head) {
     // The front petal: pointed, overlapping the other two, with its seams showing.
     ctx.beginPath();
     ctx.moveTo(-widest * 0.72, yW);
-    ctx.quadraticCurveTo(-rim * 0.9, top + ry * 0.2, 0, top - R * 0.38);
+    ctx.quadraticCurveTo(-rim * 0.9, top + ry * 0.2, 0, top - R * 0.38 * h.jitter[2]);
     ctx.quadraticCurveTo(rim * 0.9, top + ry * 0.2, widest * 0.72, yW);
     ctx.quadraticCurveTo(0, yW * 0.4, -widest * 0.72, yW);
     ctx.fillStyle = tone(h.ink, amount * 0.92);
