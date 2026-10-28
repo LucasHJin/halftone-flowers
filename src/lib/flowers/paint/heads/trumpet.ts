@@ -1,6 +1,6 @@
 import { clamp, TAU } from "../../../../utils/math";
 import type { Head } from "../../types";
-import { tone } from "../tone";
+import { acrossLight, lightThrough, litBy, tone } from "../tone";
 import { fillPetal, headFrame, paintInDepth, petal, polygon, ring, tube, type Part } from "./petals";
 
 /**
@@ -25,10 +25,11 @@ export function paintTrumpet(ctx: CanvasRenderingContext2D, h: Head) {
       cup: 0.2,
     });
     const near = clamp(p.z / R, -1, 1);
+    const shade = 0.06 * near + litBy(...p.normal);
     parts.push({
       z: p.z,
       paint: () => {
-        ctx.fillStyle = tone(h.ink, h.tone * (0.9 + 0.1 * near), 0.06 * near);
+        ctx.fillStyle = tone(h.ink, h.tone * (0.9 + 0.1 * near), shade);
         fillPetal(ctx, p);
       },
     });
@@ -41,10 +42,19 @@ export function paintTrumpet(ctx: CanvasRenderingContext2D, h: Head) {
   const by = h.centre === h.ink ? 0.15 : 0;
   // How near the trumpet's nearest wall comes, halfway out.
   const z = length * 0.5 * f.axis[2] + R * 0.23 * Math.hypot(f.u[2], f.v[2]);
+  // Shaded round the tube, across its length: the light along the tube itself doesn't shade it.
+  const [ax, ay] = [f.axis[0], f.axis[1]];
+  const [sx, sy] = lightThrough(1, 0, 0, 1);
+  const along = (sx * ax + sy * ay) / (Math.hypot(ax, ay) || 1) ** 2;
+  const across: [number, number] = [sx - along * ax, sy - along * ay];
+  const reach = Math.hypot(...across);
   parts.push({
     z,
     paint: () => {
-      ctx.fillStyle = tone(h.centre, h.tone, by);
+      ctx.fillStyle =
+        reach > 0.2
+          ? acrossLight(ctx, ax * length * 0.5, ay * length * 0.5, R * 0.3, h.centre, h.tone, [across[0] / reach, across[1] / reach], by)
+          : tone(h.centre, h.tone, by);
       ctx.fill(body);
       if (f.axis[2] > 0.05) {
         // Looking into it: the inside is in shadow.

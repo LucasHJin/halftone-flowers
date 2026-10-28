@@ -29,13 +29,14 @@ import { paintPlume } from "./heads/plume";
 import { paintReflexed } from "./heads/reflexed";
 import { paintSpike } from "./heads/spike";
 import { paintTrumpet } from "./heads/trumpet";
-import { inMask, inShade } from "./tone";
+import { aimLight, inLight, inMask, inShade, setLight } from "./tone";
 
 /** Paints the garden's tone image, or with `mask`, the spawn mask in the same shapes. */
 export function paintGarden(ctx: CanvasRenderingContext2D, garden: Garden, mask = false) {
   const growing = garden.growing;
   const plan = garden.spawnPlan;
   const { shade } = garden.settings;
+  setLight(shade.light);
   for (const plant of garden.plants) {
     if (growing === null || !plan || !plant.spawn) {
       paintPlant(ctx, plant, garden.time, shade);
@@ -60,13 +61,17 @@ function paintPlant(ctx: CanvasRenderingContext2D, plant: Plant, t: number, shad
     for (const s of plant.stems) paintStem(ctx, s);
     for (const s of plant.stems) for (const leaf of s.leaves) paintLeaf(ctx, s, leaf, t);
     // Branch heads first, so the main flower sits on top.
-    for (let i = plant.stems.length - 1; i >= 0; i--) paintHead(ctx, plant.stems[i], t);
+    inLight(() => {
+      for (let i = plant.stems.length - 1; i >= 0; i--) paintHead(ctx, plant.stems[i], t);
+    });
   });
 }
 
 function paintHead(ctx: CanvasRenderingContext2D, s: Stem, t: number) {
   const h = s.head;
   if (!h) return;
+  // Spikes and plumes draw straight onto the screen.
+  aimLight(0);
   switch (h.kind) {
     case "spike":
       return paintSpike(ctx, s, h);
@@ -75,7 +80,9 @@ function paintHead(ctx: CanvasRenderingContext2D, s: Stem, t: number) {
   }
   ctx.save();
   ctx.translate(s.x[SEGMENTS], s.y[SEGMENTS]);
-  ctx.rotate(s.angle[SEGMENTS - 1] + s.nod);
+  const rotation = s.angle[SEGMENTS - 1] + s.nod;
+  ctx.rotate(rotation);
+  aimLight(rotation);
   switch (h.kind) {
     case "bud":
       paintBud(ctx, s, h);

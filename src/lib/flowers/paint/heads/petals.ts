@@ -62,6 +62,8 @@ export interface Petal {
   z: number;
   /** The midrib from base to tip, as x, y pairs. */
   rib: number[];
+  /** Halfway along, which way the side of the petal you see faces. */
+  normal: Vec;
 }
 
 const STEPS = 10;
@@ -77,6 +79,7 @@ export function petal(f: Frame, phi: number, shape: PetalShape): Petal {
   let [r, a] = start;
   let z = 0;
   let prev = 0;
+  let normal: Vec = [0, 0, 1];
   for (let i = 0; i <= STEPS; i++) {
     // Samples bunch up toward the tip, where the outline turns fastest.
     const k = Math.sin(((i / STEPS) * Math.PI) / 2);
@@ -87,6 +90,7 @@ export function petal(f: Frame, phi: number, shape: PetalShape): Petal {
     const half = ((width / 2) * (k ** p * (1 - k) ** q)) / peak;
     const c = point(f, phi, r, a);
     const lift = point(f, phi, -Math.sin(b), Math.cos(b));
+    if (i === STEPS / 2) normal = lift[2] < 0 ? [-lift[0], -lift[1], -lift[2]] : lift;
     rib.push(c[0], c[1]);
     z += c[2];
     for (const [side, edge] of [[1, edges[0]], [-1, edges[1]]] as const) {
@@ -101,7 +105,7 @@ export function petal(f: Frame, phi: number, shape: PetalShape): Petal {
     path.closePath();
     return path;
   }) as [Path2D, Path2D];
-  return { halves, z: z / (STEPS + 1), rib };
+  return { halves, z: z / (STEPS + 1), rib, normal };
 }
 
 export function fillPetal(ctx: CanvasRenderingContext2D, p: Petal) {

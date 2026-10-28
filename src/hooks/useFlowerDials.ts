@@ -110,6 +110,7 @@ const CONFIG = {
     shades: slider(15, 1, 25, 2),
     depth: slider(shade.depth, 0, 1, 0.01),
     jitter: slider(shade.jitter, 0, 0.5, 0.01),
+    light: slider(shade.light, 0, 0.5, 0.01),
   },
   halftone: {
     _collapsed: true,
@@ -264,7 +265,7 @@ function toOptions(v: Values, seed: number): FlowerFieldOptions {
         stems: [tone.stemsBack, tone.stemsFront],
         grass: [tone.grassBack, tone.grassFront],
       },
-      shade: { depth: shade.depth, jitter: shade.jitter },
+      shade: { depth: shade.depth, jitter: shade.jitter, light: shade.light },
       wind: { lean: wind.lean, waves: [toWave(wind.slowWave), toWave(wind.midWave), toWave(wind.fastWave)] },
       sway: { ...springSway(sway.spring), grassDamping: sway.grassDamping },
       cursor: { strength: cursor.strength, limit: cursor.limit, rise: cursor.rise, fade: cursor.fade, reach: cursor.reach },

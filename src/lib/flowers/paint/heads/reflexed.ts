@@ -1,6 +1,6 @@
 import { clamp, TAU } from "../../../../utils/math";
 import type { Head } from "../../types";
-import { tone } from "../tone";
+import { litBy, tone } from "../tone";
 import { fillPetal, headFrame, paintInDepth, petal, point, type Part } from "./petals";
 
 /**
@@ -25,10 +25,11 @@ export function paintReflexed(ctx: CanvasRenderingContext2D, h: Head) {
     });
     // Nearer petals print darker and a shade deeper, so neighbours part.
     const near = clamp(p.z / R, -1, 1);
+    const by = 0.08 * near + litBy(...p.normal);
     parts.push({
       z: p.z,
       paint: () => {
-        ctx.fillStyle = tone(h.ink, h.tone * (0.9 + 0.1 * near), 0.08 * near);
+        ctx.fillStyle = tone(h.ink, h.tone * (0.9 + 0.1 * near), by);
         fillPetal(ctx, p);
       },
     });

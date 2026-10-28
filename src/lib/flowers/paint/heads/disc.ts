@@ -1,13 +1,16 @@
 import { TAU } from "../../../../utils/math";
 import type { Head, Stem } from "../../types";
-import { tone } from "../tone";
+import { dome, lightStrength, lightThrough, litBy, tone } from "../tone";
 
-/** Fill for one petal: deepest at the base, fading toward the tip, optionally blushing from another ink. */
-function petalFill(ctx: CanvasRenderingContext2D, h: Head, amount: number, len: number) {
+/**
+ * Fill for one petal moved `by` along the ramp: deepest at the base, in the
+ * centre's shadow, fading toward the tip, optionally blushing from another ink.
+ */
+function petalFill(ctx: CanvasRenderingContext2D, h: Head, amount: number, len: number, by: number) {
   const g = ctx.createRadialGradient(0, 0, 0, 0, 0, len);
-  g.addColorStop(0, tone(h.blush ? h.centre : h.ink, amount));
-  g.addColorStop(h.blush ? 0.4 : 0.5, tone(h.ink, amount * 0.93));
-  g.addColorStop(1, tone(h.ink, amount * 0.7));
+  g.addColorStop(0, tone(h.blush ? h.centre : h.ink, amount, by + lightStrength()));
+  g.addColorStop(h.blush ? 0.4 : 0.5, tone(h.ink, amount * 0.93, by));
+  g.addColorStop(1, tone(h.ink, amount * 0.7, by));
   return g;
 }
 
@@ -17,7 +20,8 @@ export function paintDisc(ctx: CanvasRenderingContext2D, s: Stem, h: Head, t: nu
   // A tilted flower sits up off the end of the stem.
   ctx.translate(0, -R * (0.12 + 0.3 * (1 - h.face)));
   // Flattened toward the stem, and slanted when the head is turned about it (see headFrame).
-  ctx.transform(Math.cos(h.turn), 0, Math.sqrt(1 - h.face * h.face) * Math.sin(h.turn), h.face, 0, 0);
+  const [a, c, d] = [Math.cos(h.turn), Math.sqrt(1 - h.face * h.face) * Math.sin(h.turn), h.face];
+  ctx.transform(a, 0, c, d, 0, 0);
   const n = h.petals;
   for (let k = 0; k < n; k++) {
     // Lilies have an outer ring of three and an inner ring of three, drawn on top and a little shorter.
@@ -56,7 +60,9 @@ export function paintDisc(ctx: CanvasRenderingContext2D, s: Stem, h: Head, t: nu
       ctx.bezierCurveTo(len - span * 0.2, half * 1.05, r0 + span * 0.3, half * 0.9, r0, 0);
     }
     ctx.closePath();
-    ctx.fillStyle = petalFill(ctx, h, amount, len);
+    // Lit by which way the petal points on screen, so the flower is lighter on the side toward the light.
+    const by = litBy(a * Math.cos(phi) + c * Math.sin(phi), d * Math.sin(phi));
+    ctx.fillStyle = petalFill(ctx, h, amount, len, by);
     ctx.fill();
     ctx.restore();
   }
@@ -81,8 +87,9 @@ export function paintDisc(ctx: CanvasRenderingContext2D, s: Stem, h: Head, t: nu
     }
     return;
   }
+  const r = R * (h.kind === "daisy" ? 0.26 : n > 8 ? 0.17 : 0.2);
   ctx.beginPath();
-  ctx.arc(0, 0, R * (h.kind === "daisy" ? 0.26 : n > 8 ? 0.17 : 0.2), 0, TAU);
-  ctx.fillStyle = tone(h.centre, 0.95);
+  ctx.arc(0, 0, r, 0, TAU);
+  ctx.fillStyle = dome(ctx, 0, 0, r, h.centre, 0.95, lightThrough(a, 0, c, d));
   ctx.fill();
 }

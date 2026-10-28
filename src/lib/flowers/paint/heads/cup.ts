@@ -1,6 +1,6 @@
 import { lerp, TAU } from "../../../../utils/math";
 import type { Head } from "../../types";
-import { tone } from "../tone";
+import { acrossLight, dome, lightStrength, lightThrough, litBy, tone } from "../tone";
 
 /**
  * Cup-shaped flowers seen at a tilt: a bowl whose rim is an ellipse. Poppies are
@@ -23,12 +23,14 @@ export function paintCup(ctx: CanvasRenderingContext2D, h: Head) {
   const amount = h.tone;
   const crinkle = h.kind === "poppy" ? 0.06 : 0;
   // A head turned about its stem leans a little to one side.
-  ctx.transform(1, 0, -0.3 * Math.sin(h.turn), 1, 0, 0);
+  const skew = -0.3 * Math.sin(h.turn);
+  ctx.transform(1, 0, skew, 1, 0, 0);
+  const sun = lightThrough(1, 0, skew, 1);
 
   if (h.kind === "rose") {
     // Sepals curling down from under the bloom.
-    ctx.fillStyle = tone(1, 0.75);
     for (const side of [-1, 1]) {
+      ctx.fillStyle = tone(1, 0.75, litBy(side, 0.5));
       ctx.beginPath();
       ctx.moveTo(side * base, -R * 0.05);
       ctx.quadraticCurveTo(side * R * 0.55, R * 0.02, side * R * 0.7, R * 0.3);
@@ -38,8 +40,8 @@ export function paintCup(ctx: CanvasRenderingContext2D, h: Head) {
   }
   if (h.kind === "tulip") {
     // The two side petals' tips, peeking up behind the rim.
-    ctx.fillStyle = tone(h.ink, amount * 0.85);
     for (const side of [-1, 1]) {
+      ctx.fillStyle = tone(h.ink, amount * 0.85, litBy(side, 0));
       ctx.beginPath();
       ctx.moveTo(side * rim * 0.2, top + ry * 0.2);
       ctx.quadraticCurveTo(side * rim * 1.05, top, side * rim * 0.95, top - R * 0.32 * h.jitter[(side + 1) / 2]);
@@ -62,10 +64,13 @@ export function paintCup(ctx: CanvasRenderingContext2D, h: Head) {
     ctx.lineTo(Math.cos(th) * rim * w, top + Math.sin(th) * ry * w);
   }
   ctx.closePath();
-  const g = ctx.createLinearGradient(0, 0, 0, top - ry);
-  g.addColorStop(0, tone(h.blush ? h.centre : h.ink, amount));
-  g.addColorStop(h.blush ? 0.35 : 0.3, tone(h.ink, amount * 0.95));
-  g.addColorStop(1, tone(h.ink, amount * 0.78));
+  // Deepest at the base and palest at the rim, and slanted so the side toward the light prints lighter too.
+  const g = ctx.createLinearGradient(-sun[0] * widest * 0.6, 0, sun[0] * widest * 0.6, top - ry);
+  // How much of the light comes from the side rather than straight down the stem.
+  const side = lightStrength() * Math.abs(sun[0]);
+  g.addColorStop(0, tone(h.blush ? h.centre : h.ink, amount, side));
+  g.addColorStop(h.blush ? 0.35 : 0.3, tone(h.ink, amount * 0.95, side * 0.5));
+  g.addColorStop(1, tone(h.ink, amount * 0.78, -side));
   ctx.fillStyle = g;
   ctx.fill();
 
@@ -83,12 +88,17 @@ export function paintCup(ctx: CanvasRenderingContext2D, h: Head) {
       else ctx.lineTo(x, y);
     }
     ctx.closePath();
-    ctx.fillStyle = h.kind === "tulip" ? tone(h.centre === 2 ? 1 : h.centre, 0.8) : tone(h.ink, Math.min(1, amount * 1.08));
+    // Lit on its far side, where the light reaches over the rim.
+    const back: [number, number] = [-sun[0], -sun[1]];
+    ctx.fillStyle =
+      h.kind === "tulip"
+        ? acrossLight(ctx, 0, top, rim * 0.55, h.centre === 2 ? 1 : h.centre, 0.8, back)
+        : acrossLight(ctx, 0, top, rim, h.ink, Math.min(1, amount * 1.08), back);
     ctx.fill();
     ctx.clip();
     if (h.kind === "poppy") {
       const cy = top + ry * 0.2;
-      ctx.fillStyle = tone(h.centre, 1);
+      ctx.fillStyle = dome(ctx, 0, cy, R * 0.28, h.centre, 1, sun);
       ctx.beginPath();
       ctx.ellipse(0, cy, R * 0.28, R * 0.28 * sinT, 0, 0, TAU);
       ctx.fill();
@@ -123,7 +133,7 @@ export function paintCup(ctx: CanvasRenderingContext2D, h: Head) {
     ctx.quadraticCurveTo(-rim * 0.9, top + ry * 0.2, 0, top - R * 0.38 * h.jitter[2]);
     ctx.quadraticCurveTo(rim * 0.9, top + ry * 0.2, widest * 0.72, yW);
     ctx.quadraticCurveTo(0, yW * 0.4, -widest * 0.72, yW);
-    ctx.fillStyle = tone(h.ink, amount * 0.92);
+    ctx.fillStyle = acrossLight(ctx, 0, yW, widest * 0.72, h.ink, amount * 0.92, sun);
     ctx.fill();
     ctx.beginPath();
     for (const side of [-1, 1]) {

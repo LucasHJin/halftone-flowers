@@ -1,6 +1,6 @@
 import { clamp, TAU } from "../../../../utils/math";
 import type { Head } from "../../types";
-import { tone } from "../tone";
+import { litBy, tone } from "../tone";
 import { fillPetal, headFrame, paintInDepth, petal, type Part } from "./petals";
 
 /**
@@ -38,7 +38,7 @@ export function paintIris(ctx: CanvasRenderingContext2D, h: Head) {
       z: up.z,
       paint: () => {
         const near = clamp(up.z / R, -1, 1);
-        ctx.fillStyle = tone(h.ink, h.tone * (0.9 + 0.1 * near), 0.06 * near);
+        ctx.fillStyle = tone(h.ink, h.tone * (0.9 + 0.1 * near), 0.06 * near + litBy(...up.normal));
         fillPetal(ctx, up);
       },
     });
@@ -46,7 +46,7 @@ export function paintIris(ctx: CanvasRenderingContext2D, h: Head) {
       z: down.z,
       paint: () => {
         const near = clamp(down.z / R, -1, 1);
-        ctx.fillStyle = tone(h.centre, h.tone * (0.9 + 0.1 * near), 0.06 * near);
+        ctx.fillStyle = tone(h.centre, h.tone * (0.9 + 0.1 * near), 0.06 * near + litBy(...down.normal));
         fillPetal(ctx, down);
         // The beard is on the top of the fall, so only falls toward you show it.
         if (down.z < R * 0.1) return;

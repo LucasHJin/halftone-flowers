@@ -58,6 +58,8 @@ export interface ShadeSettings {
   depth: number;
   /** How far each plant strays from that at random, either way, as a share of the ramp. */
   jitter: number;
+  /** How much lighter the side of each flower head facing the light, from the upper left, prints than the side facing away, as a share of the ramp. */
+  light: number;
 }
 
 /** One wave of wind rolling across the bed from the left. */
@@ -145,7 +147,7 @@ export const DEFAULT_SETTINGS: FlowerSettings = {
   species: SPECIES,
   mix: { bouquet: BOUQUET_MIX, meadow: MEADOW_MIX },
   tone: { flowers: [0.6, 1], stems: [0.55, 0.85], grass: [0.4, 0.7] },
-  shade: { depth: 0.19, jitter: 0.09 },
+  shade: { depth: 0.19, jitter: 0.09, light: 0.3 },
   wind: {
     lean: 0.3,
     waves: [

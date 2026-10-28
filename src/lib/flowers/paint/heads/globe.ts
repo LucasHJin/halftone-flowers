@@ -1,6 +1,6 @@
 import { clamp, TAU } from "../../../../utils/math";
 import type { Head } from "../../types";
-import { tone } from "../tone";
+import { litBy, tone } from "../tone";
 import { fillPetal, headFrame, paintInDepth, petal, type Part } from "./petals";
 
 /**
@@ -37,7 +37,7 @@ export function paintGlobe(ctx: CanvasRenderingContext2D, h: Head) {
       });
       const near = clamp(p.z / R, -1, 1);
       // Neighbours in a ring alternate shades too.
-      const by = ring.by + (k % 2 ? 0.06 : -0.06) + 0.05 * near;
+      const by = ring.by + (k % 2 ? 0.06 : -0.06) + 0.05 * near + litBy(...p.normal);
       const amount = h.tone * (0.9 + 0.1 * near);
       parts.push({
         z: p.z,

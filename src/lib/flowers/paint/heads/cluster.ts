@@ -1,6 +1,6 @@
 import { TAU } from "../../../../utils/math";
 import type { Head, Stem } from "../../types";
-import { tone } from "../tone";
+import { litBy, tone } from "../tone";
 
 /** A spray of tiny flowers on thin stalks fanning out from the top of the stem. */
 export function paintCluster(ctx: CanvasRenderingContext2D, s: Stem, h: Head, t: number) {
@@ -31,8 +31,9 @@ export function paintCluster(ctx: CanvasRenderingContext2D, s: Stem, h: Head, t:
   ctx.lineWidth = Math.max(1, s.tipWidth * 0.6);
   ctx.strokeStyle = tone(s.ink, s.tone);
   ctx.stroke();
-  ctx.fillStyle = tone(h.ink, h.tone);
   for (let i = 0; i < ends.length; i += 3) {
+    // Florets on the side of the spray toward the light print lighter.
+    ctx.fillStyle = tone(h.ink, h.tone, litBy(ends[i], ends[i + 1] + R * 0.5));
     ctx.beginPath();
     ctx.arc(ends[i], ends[i + 1], R * 0.2 * ends[i + 2], 0, TAU);
     ctx.fill();
