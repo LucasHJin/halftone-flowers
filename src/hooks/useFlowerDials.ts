@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useDialKit, type DialConfig, type ResolvedValues, type SpringConfig, type TransitionConfig } from "dialkit";
+import { useDialKitController, type DialConfig, type ResolvedValues, type SpringConfig, type TransitionConfig } from "dialkit";
 import {
   DEFAULT_COLORS,
   DEFAULT_SETTINGS,
@@ -11,6 +11,7 @@ import {
   type SwaySettings,
   type WindWave,
 } from "../lib/flowers";
+import { hueOf, withHue } from "../utils/color";
 import { clamp, TAU } from "../utils/math";
 
 const { layout, species, mix, tone, shade, wind, sway, cursor, spawn } = DEFAULT_SETTINGS;
@@ -104,6 +105,7 @@ const CONFIG = {
     light: DEFAULT_COLORS.light,
     ink: DEFAULT_COLORS.ink,
     dark: DEFAULT_COLORS.dark,
+    randomize: { type: "action", label: "Random colours" },
   },
   shade: {
     _collapsed: true,
@@ -284,6 +286,23 @@ function toOptions(v: Values, seed: number): FlowerFieldOptions {
 const randomSeed = () => (Math.random() * 2 ** 32) >>> 0;
 
 /**
+ * The default colours turned to one random hue at least 60° round from `from`,
+ * at a random vividness from grey to the defaults' own. Each keeps its
+ * lightness (see withHue), so the shades step the same way whatever comes up.
+ */
+function randomColors(from: number) {
+  const hue = from + 60 + Math.random() * 240;
+  // Leans vivid: three times in four above half.
+  const vividness = Math.sqrt(Math.random());
+  return {
+    background: withHue(DEFAULT_COLORS.background, hue, vividness),
+    light: withHue(DEFAULT_COLORS.light, hue, vividness),
+    ink: withHue(DEFAULT_COLORS.ink, hue, vividness),
+    dark: withHue(DEFAULT_COLORS.dark, hue, vividness),
+  };
+}
+
+/**
  * A DialKit panel for every FlowerField option and setting, starting from the
  * defaults. Key the FlowerField on `generation`: "Grow again" and "New bed"
  * remount it so it grows in, and spawn settings only apply then.
@@ -291,12 +310,13 @@ const randomSeed = () => (Math.random() * 2 ** 32) >>> 0;
 export function useFlowerDials() {
   const [seed, setSeed] = useState(randomSeed);
   const [generation, setGeneration] = useState(0);
-  const values = useDialKit("Flowers", CONFIG, {
+  const dials = useDialKitController("Flowers", CONFIG, {
     id: "flowers",
     onAction: (action) => {
+      if (action === "colors.randomize") dials.setValues({ colors: randomColors(hueOf(dials.getValues().colors.ink)) });
       if (action === "newBed") setSeed(randomSeed());
       if (action === "growAgain" || action === "newBed") setGeneration((g) => g + 1);
     },
   });
-  return { options: toOptions(values, seed), generation };
+  return { options: toOptions(dials.values, seed), generation };
 }

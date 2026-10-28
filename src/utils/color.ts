@@ -31,16 +31,51 @@ function toLab(colour: string): Lab {
   ];
 }
 
-function fromLab([L, A, B]: Lab) {
+/** Linear sRGB channels, outside 0 to 1 where the screen can't show the colour. */
+function toLinearRgb([L, A, B]: Lab) {
   const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3;
   const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
   const s = (L - 0.0894841775 * A - 1.291485548 * B) ** 3;
-  const rgb = [
+  return [
     4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
     -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
     -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
   ];
-  return `#${rgb.map((c) => Math.round(Math.min(1, Math.max(0, toGamma(c))) * 255).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function fromLab(lab: Lab) {
+  return `#${toLinearRgb(lab).map((c) => Math.round(Math.min(1, Math.max(0, toGamma(c))) * 255).toString(16).padStart(2, "0")).join("")}`;
+}
+
+const inGamut = (lab: Lab) => toLinearRgb(lab).every((c) => c >= -1e-4 && c <= 1 + 1e-4);
+
+/** OKLCH hue of a colour, in degrees. */
+export function hueOf(colour: string) {
+  const [, A, B] = toLab(colour);
+  return ((Math.atan2(B, A) * 180) / Math.PI + 360) % 360;
+}
+
+/**
+ * `colour` turned to OKLCH `hue` in degrees, with its chroma times `vividness`
+ * (0 grey). It keeps its OKLCH lightness, so it looks just as light whatever
+ * the hue or vividness. Where a screen can't show that much chroma at this
+ * lightness and hue, it takes the most the screen can.
+ */
+export function withHue(colour: string, hue: number, vividness = 1) {
+  const [L, A, B] = toLab(colour);
+  const h = (hue * Math.PI) / 180;
+  const at = (c: number): Lab => [L, c * Math.cos(h), c * Math.sin(h)];
+  let c = Math.hypot(A, B) * vividness;
+  if (!inGamut(at(c))) {
+    let lo = 0;
+    for (let i = 0; i < 20; i++) {
+      const mid = (lo + c) / 2;
+      if (inGamut(at(mid))) lo = mid;
+      else c = mid;
+    }
+    c = lo;
+  }
+  return fromLab(at(c));
 }
 
 /** `n` colours evenly spaced along a ramp through `stops`, mixed in OKLab so the steps look even. */
