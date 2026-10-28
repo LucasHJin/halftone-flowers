@@ -46,7 +46,8 @@ export function paintGarden(ctx: CanvasRenderingContext2D, garden: Garden, mask 
     if (front >= plant.stems[0].rootY) continue;
     ctx.save();
     ctx.beginPath();
-    ctx.rect(-garden.width, front, garden.width * 3, garden.height * 2);
+    // Down to well below the roots wherever the front is: it keeps climbing past the top of the screen until the whole bed is in.
+    ctx.rect(-garden.width, front, garden.width * 3, garden.height * 2 - front);
     ctx.clip();
     if (mask) inMask(spawnColor(plant, plan), () => paintPlant(ctx, plant, garden.time, shade));
     else paintPlant(ctx, plant, garden.time, shade);

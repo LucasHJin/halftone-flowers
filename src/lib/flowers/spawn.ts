@@ -26,6 +26,12 @@ export interface SpawnPlan {
   latest: number;
   /** Fastest and slowest climb, as logs of seconds per px. */
   pace: [number, number];
+  /**
+   * How far each dot has got through its pop, by lattice position. Dots only
+   * move forward, so where a later plant's front passes over one already in,
+   * it stays in instead of shrinking away and popping in again.
+   */
+  grown: Map<number, number>;
 }
 
 /** Gives each plant its start and climbing pace. Call once the plants are posed. */
@@ -62,7 +68,7 @@ export function planSpawn(plants: Plant[], width: number, height: number, seed: 
     fastest = Math.min(fastest, Math.log(pace));
     slowest = Math.max(slowest, Math.log(pace));
   });
-  return { end, grow, scatter, latest: latest || 1, pace: [fastest - 0.01, slowest + 0.01] };
+  return { end, grow, scatter, latest: latest || 1, pace: [fastest - 0.01, slowest + 0.01], grown: new Map() };
 }
 
 /** Where a plant's front is `elapsed` seconds in: nothing above it has started growing. */
@@ -82,14 +88,17 @@ export function spawnColor(plant: Plant, plan: SpawnPlan) {
 
 /** Reads the spawn mask: how big each diamond's dot is `elapsed` seconds in. */
 export function spawnScale(plan: SpawnPlan, elapsed: number, height: number): DotScale {
-  const { grow, scatter, latest, pace: [lo, hi] } = plan;
+  const { grow, scatter, latest, pace: [lo, hi], grown } = plan;
   return (r, g, b, _x, y, i, j) => {
     if (b === 0) return 1;
     // Dividing by coverage undoes antialiasing at the edges; where plants meet, their timings blend.
     const bottom = (r / b) * latest;
     const pace = Math.exp(lerp(lo, hi, g / b));
     const reached = bottom + (height - y) * pace + scatter * hash(i, j);
-    return pop(clamp((elapsed - reached) / grow, 0, 1));
+    const key = i * 65536 + j;
+    const t = Math.max(grown.get(key) ?? 0, clamp((elapsed - reached) / grow, 0, 1));
+    grown.set(key, t);
+    return pop(t);
   };
 }
 
