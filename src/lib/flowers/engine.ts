@@ -1,6 +1,6 @@
 import { lightnessOf, opposite, withLightness } from "../../utils/color";
 import { clamp } from "../../utils/math";
-import { DiamondHalftone, evenSizes, type HalftoneColors } from "../halftone";
+import { DiamondHalftone, evenSizes, type DotShape, type HalftoneColors } from "../halftone";
 import { Garden } from "./garden";
 import type { InsectKind } from "./insects";
 import { paintGarden } from "./paint";
@@ -43,10 +43,14 @@ export interface FlowerFieldOptions {
   scheme?: Scheme;
   /** How many shades the colour ramp is split into. Default 15. */
   shades?: number;
-  /** How far ink spreads before it sets, as a share of a diamond's width: dots blur and are cut back sharp, so near ones run together. Default 0.1; 0 keeps every dot round. */
+  /** How far ink spreads before it sets, as a share of a diamond's width: dots blur and are cut back sharp, so near ones run together. Default 0.1; 0 keeps every dot its own shape. */
   spread?: number;
   /** Where spread ink is cut back, from 0 to 1: lower keeps more of it, so dots swell and merge more. Default 0.26. */
   threshold?: number;
+  /** Round dots, or diamonds with their sides curved in by `curve`. Each size prints the same tone either way; diamonds spread half as far. Default round. */
+  dot?: DotShape;
+  /** How far a diamond dot's sides curve in, from 0 straight to 1 a four-pointed star. Default 0.75. */
+  curve?: number;
   /** Multiplier on how far the wind bends the stems. Default 1. */
   wind?: number;
   /** Multiplier on the number of stems. Default 1. */
@@ -146,8 +150,10 @@ export class FlowerEngine {
     window.removeEventListener("pointermove", this.onPointerMove);
   }
 
-  /** Dot sizes, shades and ink spread from the options. `applyInk` or a resize puts the spread on the canvas. */
-  private setDots({ sizes, steps, shades, spread, threshold }: FlowerFieldOptions) {
+  /** Dot shape, sizes, shades and ink spread from the options. `applyInk` or a resize puts the spread on the canvas. */
+  private setDots({ sizes, steps, shades, spread, threshold, dot, curve }: FlowerFieldOptions) {
+    this.halftone.dot = dot ?? "round";
+    this.halftone.curve = curve ?? 0.75;
     this.halftone.sizes = sizes?.length ? sizes : evenSizes(steps ?? 6);
     this.halftone.shades = shades ?? 15;
     this.halftone.spread = spread ?? 0.1;

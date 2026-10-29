@@ -1,6 +1,7 @@
 /**
- * Turns a tone image into a halftone of round dots on a diamond lattice, each
- * dot one shade of a colour ramp.
+ * Turns a tone image into a halftone of dots on a diamond lattice, each dot
+ * one shade of a colour ramp. Dots are round, or diamonds with their sides
+ * curved in.
  *
  * Scenes draw into a hidden canvas in screen coordinates: red is how much ink a
  * spot wants, green that times how far along the ramp, from light to dark, its
@@ -23,10 +24,13 @@ import { clamp, TAU } from "../../utils/math";
 /** Samples per diamond along each lattice axis. */
 const SS = 2;
 const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
-/** Radius of a circle with the area of a diamond of half-diagonal 1, so each size prints the same tone either way. */
+/** Radius of a circle with the area of a diamond of half-diagonal 1, so each size prints the same tone whatever the shape. */
 const ROUND = Math.sqrt(2 / Math.PI);
 const SVG = "http://www.w3.org/2000/svg";
 let filters = 0;
+
+/** Round, or a diamond pointing up, down and to the sides with its sides curved in. */
+export type DotShape = "round" | "diamond";
 
 /**
  * Size multiplier for the dot of diamond (i, j), centred at (x, y), from the
@@ -60,12 +64,20 @@ export class DiamondHalftone {
   sizes = evenSizes(5);
   /** How many shades the ramp from `light` through `ink` to `dark` is split into. Odd keeps `ink` itself as one. */
   shades = 9;
-  /** How far ink spreads before it sets, as a share of a diamond's width; 0 keeps every dot round. Takes effect on `applyInk`. */
+  /**
+   * How far ink spreads before it sets, as a share of a diamond's width; 0
+   * keeps every dot its own shape. Diamond dots spread half as far, so their
+   * points and curved sides survive. Takes effect on `applyInk`.
+   */
   spread = 0.1;
   /** Where spread ink is cut back, from 0 to 1: lower keeps more of it. Takes effect on `applyInk`. */
   threshold = 0.3;
   /** The ramp for ink the scene marks in blue. Without one, it prints in the main ramp. */
   accent: HalftoneRamp | null = null;
+  /** Takes effect on `present`, and on `applyInk` for how far it spreads. */
+  dot: DotShape = "round";
+  /** How far a diamond dot's sides curve in, from 0 straight to 1 a four-pointed star. */
+  curve = 0.75;
 
   private ctx: CanvasRenderingContext2D;
   private scene = document.createElement("canvas");
@@ -109,25 +121,20 @@ export class DiamondHalftone {
 
   /**
    * Puts `spread`, `threshold` and the background colour on the canvas element.
-   * The dots are drawn on a transparent canvas, so the background is its CSS
-   * background, or the filter's own while ink spreads.
+   * The dots are drawn on a transparent canvas, and the filter lays them over
+   * the background. With no spread it passes them through uncut.
    */
   applyInk() {
-    const blur = this.spread * this.cell;
-    const style = this.canvas.style;
-    if (blur <= 0) {
-      style.filter = "";
-      style.background = this.colors.background;
-      return;
-    }
+    const blur = Math.max(0, this.spread * this.cell * (this.dot === "diamond" ? 0.5 : 1));
     const f = (this.filter ??= createInkFilter());
     // Steep enough that the cut edge is about one device px wide, so it stays smooth without blurring.
-    const sharp = Math.max(1, 2.5 * blur * this.dpr);
+    const sharp = blur > 0 ? Math.max(1, 2.5 * blur * this.dpr) : 1;
+    const cut = blur > 0 ? -sharp * this.threshold : 0;
     f.blur.setAttribute("stdDeviation", String(blur));
-    f.cut.setAttribute("values", `1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 ${sharp} ${-sharp * this.threshold}`);
+    f.cut.setAttribute("values", `1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 ${sharp} ${cut}`);
     f.paper.setAttribute("flood-color", this.colors.background);
-    style.filter = `url(#${f.id})`;
-    style.background = "";
+    // Kept on with no spread, and the canvas never gets a CSS background: in Chrome, once the canvas has had an opaque background, the filter no longer cuts and the dots print blurred.
+    this.canvas.style.filter = `url(#${f.id})`;
   }
 
   destroy() {
@@ -178,6 +185,10 @@ export class DiamondHalftone {
     const paths = palette.map(() => new Path2D());
     const accentPaths = accent.map(() => new Path2D());
     const last = paths.length - 1;
+    const round = this.dot === "round";
+    const curve = clamp(this.curve, 0, 1);
+    // Each curved side cuts 2/3 of the triangle under its control point from a plain diamond; the tips reach further to make up for it.
+    const tip = 1 / Math.sqrt(1 - (2 * curve) / 3);
 
     for (let cj = 0; cj < nv; cj++) {
       const j = iv0 + cj;
@@ -222,9 +233,19 @@ export class DiamondHalftone {
           if (r < 0.1) continue;
         }
         const path = (marked * 2 > ink ? accentPaths : paths)[Math.round(Math.min(1, shade / ink) * last)];
-        r *= ROUND;
-        path.moveTo(x + r, y);
-        path.arc(x, y, r, 0, TAU);
+        if (round) {
+          r *= ROUND;
+          path.moveTo(x + r, y);
+          path.arc(x, y, r, 0, TAU);
+        } else {
+          r *= tip;
+          const c = (r * (1 - curve)) / 2;
+          path.moveTo(x + r, y);
+          path.quadraticCurveTo(x + c, y + c, x, y + r);
+          path.quadraticCurveTo(x - c, y + c, x - r, y);
+          path.quadraticCurveTo(x - c, y - c, x, y - r);
+          path.quadraticCurveTo(x + c, y - c, x + r, y);
+        }
       }
     }
 

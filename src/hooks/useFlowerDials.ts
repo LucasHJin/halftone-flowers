@@ -122,6 +122,9 @@ const CONFIG = {
     autoCell: true,
     cell: slider(8, 3, 20, 1),
     steps: slider(6, 1, 10, 1),
+    // Diamonds point up, down and to the sides, their sides curved in by `curve`.
+    dot: { type: "select", options: ["round", "diamond"], default: "round" },
+    curve: slider(0.75, 0, 1, 0.01),
     spread: slider(0.1, 0, 0.5, 0.01),
     threshold: slider(0.26, 0.05, 0.95, 0.01),
   },
@@ -262,6 +265,8 @@ function toOptions(v: Values, seed: number): FlowerFieldOptions {
     shades: shade.shades,
     spread: halftone.spread,
     threshold: halftone.threshold,
+    dot: halftone.dot === "diamond" ? "diamond" : "round",
+    curve: halftone.curve,
     colors: { background: colors.background, light: colors.light, ink: colors.ink, dark: colors.dark },
     scheme: colors.mode === "dark" ? "dark" : "light",
     wind: wind.bend,
