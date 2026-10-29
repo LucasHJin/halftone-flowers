@@ -55,6 +55,11 @@ export function hueOf(colour: string) {
   return ((Math.atan2(B, A) * 180) / Math.PI + 360) % 360;
 }
 
+/** OKLCH lightness of a colour, from 0 black to 1 white. */
+export function lightnessOf(colour: string) {
+  return toLab(colour)[0];
+}
+
 /**
  * `colour` turned to OKLCH `hue` in degrees, with its chroma times `vividness`
  * (0 grey). It keeps its OKLCH lightness, so it looks just as light whatever
@@ -63,9 +68,18 @@ export function hueOf(colour: string) {
  */
 export function withHue(colour: string, hue: number, vividness = 1) {
   const [L, A, B] = toLab(colour);
-  const h = (hue * Math.PI) / 180;
+  return showable(L, (hue * Math.PI) / 180, Math.hypot(A, B) * vividness);
+}
+
+/** `colour` at OKLCH `lightness`, keeping its hue and chroma, or as much chroma as the screen can show there. */
+export function withLightness(colour: string, lightness: number) {
+  const [, A, B] = toLab(colour);
+  return showable(Math.min(1, Math.max(0, lightness)), Math.atan2(B, A), Math.hypot(A, B));
+}
+
+/** The OKLCH colour (L, c, h radians), with c cut back to the most a screen can show at that lightness and hue. */
+function showable(L: number, h: number, c: number) {
   const at = (c: number): Lab => [L, c * Math.cos(h), c * Math.sin(h)];
-  let c = Math.hypot(A, B) * vividness;
   if (!inGamut(at(c))) {
     let lo = 0;
     for (let i = 0; i < 20; i++) {

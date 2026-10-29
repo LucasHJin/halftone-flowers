@@ -102,6 +102,8 @@ function springSway(spring: TransitionConfig): Pick<SwaySettings, "speed" | "dam
 
 const CONFIG = {
   colors: {
+    // The colours below are for a light page; dark turns them over.
+    mode: { type: "select", options: ["light", "dark"], default: "light" },
     background: DEFAULT_COLORS.background,
     light: DEFAULT_COLORS.light,
     ink: DEFAULT_COLORS.ink,
@@ -261,6 +263,7 @@ function toOptions(v: Values, seed: number): FlowerFieldOptions {
     spread: halftone.spread,
     threshold: halftone.threshold,
     colors: { background: colors.background, light: colors.light, ink: colors.ink, dark: colors.dark },
+    scheme: colors.mode === "dark" ? "dark" : "light",
     wind: wind.bend,
     density: layout.density,
     seed,

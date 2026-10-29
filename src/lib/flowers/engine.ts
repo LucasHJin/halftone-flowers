@@ -1,4 +1,4 @@
-import { opposite } from "../../utils/color";
+import { lightnessOf, opposite, withLightness } from "../../utils/color";
 import { clamp } from "../../utils/math";
 import { DiamondHalftone, evenSizes, type HalftoneColors } from "../halftone";
 import { Garden } from "./garden";
@@ -18,6 +18,18 @@ export const DEFAULT_COLORS: HalftoneColors = {
   dark: "#16295f",
 };
 
+/** A light page, or a dark one with the colours' lightness turned over (see schemeColors). */
+export type Scheme = "light" | "dark";
+
+/** OKLCH lightness of the background on a dark page. */
+const DARK_PAGE = 0.2;
+/**
+ * Extra lift on a dark page for colours that sat close to the light one. The
+ * eye tells dark colours apart less well than light ones, so an even turnover
+ * sinks them into the page. The lift fades out further from the page.
+ */
+const DARK_LIFT = 1.2;
+
 export interface FlowerFieldOptions {
   /** Diamond width in CSS px. Default scales with the width, from 5 to 10. */
   cell?: number;
@@ -25,8 +37,10 @@ export interface FlowerFieldOptions {
   steps?: number;
   /** Dot sizes as a share of a full diamond, by area, smallest first. Overrides `steps`. */
   sizes?: number[];
-  /** Background, and the colour ramp from `light` through `ink` to `dark` that every dot takes a shade of. Insects print in the same ramp turned to the opposite hue. */
+  /** Background, and the colour ramp from `light` through `ink` to `dark` that every dot takes a shade of, for a light page. Insects print in the same ramp turned to the opposite hue. */
   colors?: Partial<HalftoneColors>;
+  /** Light or dark page. Dark turns `colors` over (see schemeColors). Default light. */
+  scheme?: Scheme;
   /** How many shades the colour ramp is split into. Default 15. */
   shades?: number;
   /** How far ink spreads before it sets, as a share of a diamond's width: dots blur and are cut back sharp, so near ones run together. Default 0.1; 0 keeps every dot round. */
@@ -67,7 +81,7 @@ export class FlowerEngine {
 
   constructor(private canvas: HTMLCanvasElement, private options: FlowerFieldOptions = {}) {
     this.seed = options.seed ?? (Math.random() * 2 ** 32) >>> 0;
-    this.halftone = new DiamondHalftone(canvas, resolveColors(options.colors));
+    this.halftone = new DiamondHalftone(canvas, schemeColors(options.colors, options.scheme));
     this.halftone.accent = oppositeRamp(this.halftone.colors);
     this.setDots(options);
     this.settings = resolveSettings(options.settings);
@@ -109,7 +123,7 @@ export class FlowerEngine {
     this.settings = settings;
     this.garden.configure(settings);
     this.garden.wind = options.wind ?? 1;
-    this.halftone.colors = resolveColors(options.colors);
+    this.halftone.colors = schemeColors(options.colors, options.scheme);
     this.halftone.accent = oppositeRamp(this.halftone.colors);
     this.setDots(options);
     this.halftone.applyInk();
@@ -210,13 +224,29 @@ export class FlowerEngine {
   };
 }
 
-function resolveColors(colors: Partial<HalftoneColors> | undefined) {
+/**
+ * The colours a field prints in: `colors` over the defaults, as they are for a
+ * light page. For a dark one, each keeps its hue and vividness and is turned
+ * over in OKLCH lightness: the background goes dark, and each ramp colour sits
+ * about as far from it as before, now on the light side, with those nearest
+ * the page lifted a little more (see DARK_LIFT). So pale flowers still sit
+ * close to the page and dark ones still stand out most.
+ */
+export function schemeColors(colors?: Partial<HalftoneColors>, scheme: Scheme = "light"): HalftoneColors {
   const out = { ...DEFAULT_COLORS };
   for (const key of Object.keys(out) as (keyof HalftoneColors)[]) {
     const value = colors?.[key];
     if (value) out[key] = value;
   }
-  return out;
+  if (scheme === "light") return out;
+  const page = lightnessOf(out.background);
+  const span = 1 - DARK_PAGE;
+  const flip = (colour: string) => {
+    // How far from the page it is, as a share of the room above a dark one.
+    const t = Math.min(1, Math.max(0, (page - lightnessOf(colour)) / span));
+    return withLightness(colour, DARK_PAGE + span * (t + DARK_LIFT * t * (1 - t) ** 4));
+  };
+  return { background: flip(out.background), light: flip(out.light), ink: flip(out.ink), dark: flip(out.dark) };
 }
 
 function oppositeRamp({ light, ink, dark }: HalftoneColors) {

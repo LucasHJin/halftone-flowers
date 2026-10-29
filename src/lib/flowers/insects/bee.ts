@@ -122,7 +122,7 @@ function wings(parts: Part[], ctx: CanvasRenderingContext2D, pose: Pose, b: Inse
       ctx.globalAlpha = 0.85;
       pose.inPlane(ctx, root, d, c, () => {
         // The forewing, and the smaller hindwing behind it.
-        // A shade darker than the palest ink, so they stand out against the background.
+        // A shade further along the ramp than its palest end, so they stand out from the page.
         ctx.fillStyle = tone(2, 1, by + 0.12);
         ctx.beginPath();
         ctx.ellipse(0.33, 0, 0.33, 0.14, 0, 0, TAU);

@@ -1,4 +1,4 @@
-export { DEFAULT_COLORS, FlowerEngine, type FlowerFieldOptions } from "./engine";
+export { DEFAULT_COLORS, FlowerEngine, schemeColors, type FlowerFieldOptions, type Scheme } from "./engine";
 export {
   DEFAULT_SETTINGS,
   type CursorSettings,
