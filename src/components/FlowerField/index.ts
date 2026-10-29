@@ -1,1 +1,1 @@
-export { FlowerField, type FlowerFieldProps } from "./FlowerField";
+export { FlowerField, type FlowerFieldHandle, type FlowerFieldProps } from "./FlowerField";

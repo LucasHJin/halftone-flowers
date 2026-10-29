@@ -2,9 +2,9 @@ import { useEffect, useRef, type RefObject } from "react";
 import { FlowerEngine, type FlowerFieldOptions } from "../lib/flowers";
 
 /**
- * Runs a FlowerEngine on the canvas while it's mounted. Changing an option
- * updates the running bed in place (see FlowerEngine.update); only a remount
- * grows it in again.
+ * Runs a FlowerEngine on the canvas while it's mounted, and returns a ref to
+ * it. Changing an option updates the running bed in place (see
+ * FlowerEngine.update); only a remount grows it in again.
  */
 export function useFlowerField(canvasRef: RefObject<HTMLCanvasElement | null>, options: FlowerFieldOptions) {
   const { cell, steps, sizes, shades, spread, threshold, colors, wind, density, seed, settings } = options;
@@ -41,4 +41,5 @@ export function useFlowerField(canvasRef: RefObject<HTMLCanvasElement | null>, o
     },
     [canvasRef],
   );
+  return engineRef;
 }

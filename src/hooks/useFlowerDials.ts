@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, type RefObject } from "react";
 import { useDialKitController, type DialConfig, type ResolvedValues, type SpringConfig, type TransitionConfig } from "dialkit";
+import type { FlowerFieldHandle } from "../components/FlowerField";
 import {
   DEFAULT_COLORS,
   DEFAULT_SETTINGS,
@@ -14,7 +15,7 @@ import {
 import { hueOf, withHue } from "../utils/color";
 import { clamp, TAU } from "../utils/math";
 
-const { layout, species, mix, tone, shade, wind, sway, cursor, spawn } = DEFAULT_SETTINGS;
+const { layout, species, mix, tone, shade, wind, sway, cursor, spawn, insects } = DEFAULT_SETTINGS;
 const KINDS = Object.keys(species) as Kind[];
 const LEAVES: LeafShape[] = ["lance", "strap", "oval"];
 
@@ -153,6 +154,27 @@ const CONFIG = {
     scatter: slider(spawn.scatter, 0, 1, 0.01),
     order: slider(spawn.order, 0, 1, 0.01),
   },
+  insects: {
+    _collapsed: true,
+    enabled: insects.enabled,
+    every: slider(insects.every, 1, 60, 0.5),
+    most: slider(insects.most, 0, 10, 1),
+    butterflies: slider(insects.odds[0], 0, 5, 0.1),
+    bees: slider(insects.odds[1], 0, 5, 0.1),
+    size: slider(insects.size, 0.3, 2.5, 0.05),
+    speed: slider(insects.speed, 0.2, 3, 0.05),
+    visitsMin: slider(insects.visits[0], 0, 10, 1),
+    visitsMax: slider(insects.visits[1], 0, 10, 1),
+    stayMin: slider(insects.stay[0], 0, 20, 0.5),
+    stayMax: slider(insects.stay[1], 0, 20, 0.5),
+    trail: {
+      fade: slider(insects.trail.fade, 0, 10, 0.1),
+      width: slider(insects.trail.width, 0.5, 6, 0.1),
+      strength: slider(insects.trail.strength, 0, 1, 0.01),
+    },
+    butterfly: { type: "action", label: "Send a butterfly" },
+    bee: { type: "action", label: "Send a bee" },
+  },
   layout: {
     _collapsed: true,
     density: slider(1, 0.2, 3, 0.05),
@@ -231,7 +253,7 @@ function toWave(d: ResolvedValues<ReturnType<typeof waveDials>>): WindWave {
 }
 
 function toOptions(v: Values, seed: number): FlowerFieldOptions {
-  const { halftone, colors, shade, layout, tone, wind, sway, cursor, spawn } = v;
+  const { halftone, colors, shade, layout, tone, wind, sway, cursor, spawn, insects } = v;
   return {
     cell: halftone.autoCell ? undefined : halftone.cell,
     steps: halftone.steps,
@@ -279,6 +301,17 @@ function toOptions(v: Values, seed: number): FlowerFieldOptions {
         scatter: spawn.scatter,
         order: spawn.order,
       },
+      insects: {
+        enabled: insects.enabled,
+        every: insects.every,
+        most: insects.most,
+        odds: [insects.butterflies, insects.bees],
+        size: insects.size,
+        speed: insects.speed,
+        visits: [insects.visitsMin, insects.visitsMax],
+        stay: [insects.stayMin, insects.stayMax],
+        trail: { fade: insects.trail.fade, width: insects.trail.width, strength: insects.trail.strength },
+      },
     },
   };
 }
@@ -305,15 +338,18 @@ function randomColors(from: number) {
 /**
  * A DialKit panel for every FlowerField option and setting, starting from the
  * defaults. Key the FlowerField on `generation`: "Grow again" and "New bed"
- * remount it so it grows in, and spawn settings only apply then.
+ * remount it so it grows in, and spawn settings only apply then. The insect
+ * buttons send one in through `field`.
  */
-export function useFlowerDials() {
+export function useFlowerDials(field: RefObject<FlowerFieldHandle | null>) {
   const [seed, setSeed] = useState(randomSeed);
   const [generation, setGeneration] = useState(0);
   const dials = useDialKitController("Flowers", CONFIG, {
     id: "flowers",
     onAction: (action) => {
       if (action === "colors.randomize") dials.setValues({ colors: randomColors(hueOf(dials.getValues().colors.ink)) });
+      if (action === "insects.butterfly") field.current?.release("butterfly");
+      if (action === "insects.bee") field.current?.release("bee");
       if (action === "newBed") setSeed(randomSeed());
       if (action === "growAgain" || action === "newBed") setGeneration((g) => g + 1);
     },

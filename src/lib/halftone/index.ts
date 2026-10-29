@@ -1,1 +1,1 @@
-export { DiamondHalftone, evenSizes, type DotScale, type HalftoneColors } from "./diamondHalftone";
+export { DiamondHalftone, evenSizes, type DotScale, type HalftoneColors, type HalftoneRamp } from "./diamondHalftone";

@@ -11,6 +11,8 @@
  *
  * While the bed grows in, each plant is cut off above its growing front, so
  * whatever is behind shows through until it gets there.
+ *
+ * Insects and their trails are painted among the plants by depth.
  */
 import type { Garden } from "../garden";
 import { spawnColor, spawnFront } from "../spawn";
@@ -31,13 +33,16 @@ import { paintSpike } from "./heads/spike";
 import { paintTrumpet } from "./heads/trumpet";
 import { aimLight, inLight, inMask, inShade, setLight } from "./tone";
 
-/** Paints the garden's tone image, or with `mask`, the spawn mask in the same shapes. */
+/** Paints the garden's tone image, or with `mask`, the spawn mask in the same shapes, without insects. */
 export function paintGarden(ctx: CanvasRenderingContext2D, garden: Garden, mask = false) {
   const growing = garden.growing;
   const plan = garden.spawnPlan;
   const { shade } = garden.settings;
+  const insects = mask ? null : garden.insects;
   setLight(shade.light);
+  insects?.beginPaint();
   for (const plant of garden.plants) {
+    insects?.paintBelow(ctx, plant.depth);
     if (growing === null || !plan || !plant.spawn) {
       paintPlant(ctx, plant, garden.time, shade);
       continue;
@@ -53,6 +58,7 @@ export function paintGarden(ctx: CanvasRenderingContext2D, garden: Garden, mask 
     else paintPlant(ctx, plant, garden.time, shade);
     ctx.restore();
   }
+  insects?.paintBelow(ctx, Infinity);
 }
 
 function paintPlant(ctx: CanvasRenderingContext2D, plant: Plant, t: number, shade: ShadeSettings) {

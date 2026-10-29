@@ -9,17 +9,29 @@ const RAMP: Record<Ink, number> = { 0: 0.5, 1: 1, 2: 0 };
 let mask: string | null = null;
 let shift = 0;
 let lit = false;
+let accent = false;
 
 /**
  * Fill style for `amount` of one ink, moved `by` along the ramp toward dark:
- * red is how much ink, green that times how far toward dark it sits.
+ * red is how much ink, green that times how far toward dark it sits, and blue
+ * as much as red where it prints in the accent ramp.
  */
 export function tone(ink: Ink, amount: number, by = 0) {
   if (mask) return mask;
   const v = clamp(amount, 0, 1) * 255;
   let at = clamp(RAMP[ink] + shift, 0, 1);
   if (lit) at = clamp(at, light, 1 - light);
-  return `rgb(${Math.round(v)},${Math.round(v * clamp(at + by, 0, 1))},0)`;
+  return `rgb(${Math.round(v)},${Math.round(v * clamp(at + by, 0, 1))},${accent ? Math.round(v) : 0})`;
+}
+
+/** Runs `paint` with every ink printing in the halftone's accent ramp. */
+export function inAccent(paint: () => void) {
+  accent = true;
+  try {
+    paint();
+  } finally {
+    accent = false;
+  }
 }
 
 /** Runs `paint` with every ink moved `by` along the colour ramp, toward dark if positive. */

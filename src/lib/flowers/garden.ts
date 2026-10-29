@@ -8,6 +8,7 @@
  */
 import { clamp, createRandom, lerp, TAU } from "../../utils/math";
 import type { FlowerSettings, Mix } from "./settings";
+import { Insects } from "./insects";
 import { planSpawn, type SpawnPlan } from "./spawn";
 import { createStem, curvedStem, poseStem, SEGMENTS } from "./stem";
 import type { Head, Ink, Kind, Leaf, LeafShape, Plant, Stem } from "./types";
@@ -34,10 +35,13 @@ export class Garden {
   wind = 1;
   /** The timings of the bed growing in, while it is. */
   spawnPlan: SpawnPlan | null = null;
+  /** Butterflies and bees visiting. */
+  insects: Insects;
+  /** Base flower size, px. */
+  bloom = 40;
   private windAt: Wind;
   private nextId = 0;
   private rand: () => number = Math.random;
-  private bloom = 40;
   private stemWidth = 3;
   /** Radius around the pointer that presses on stems. */
   private hand = 30;
@@ -47,6 +51,7 @@ export class Garden {
 
   constructor(public settings: FlowerSettings) {
     this.windAt = createWind(settings.wind);
+    this.insects = new Insects(this);
   }
 
   /** Wind, sway, shade and the pointer follow new settings straight away; the rest waits for the next layout. */
@@ -133,6 +138,8 @@ export class Garden {
     this.spawnFrom = null;
     this.spawnPlan = spawn ? planSpawn(this.plants, W, H, seed, this.settings.spawn) : null;
     if (spawn) this.spawnFrom = this.time;
+    // They'd be sitting on flowers that are gone.
+    this.insects.reset();
   }
 
   /** Seconds since the plants started growing in, or null once they're all in. */
@@ -186,6 +193,7 @@ export class Garden {
         poseStem(s);
       }
     }
+    this.insects.step(dt);
   }
 
   /** The pointer moved to (x, y). Stems it passes through lean the way it's going, then drift back. */

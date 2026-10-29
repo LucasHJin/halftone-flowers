@@ -1,6 +1,6 @@
 /**
- * Everything about how the bed is laid out, sways, answers the pointer and
- * grows in, with the values it ships with. FlowerField takes any part of this
+ * Everything about how the bed is laid out, sways, answers the pointer, grows
+ * in and is visited by insects, with the values it ships with. FlowerField takes any part of this
  * as `settings` and fills in the rest from DEFAULT_SETTINGS.
  */
 import { mergeDeep, type DeepPartial } from "../../utils/merge";
@@ -120,6 +120,35 @@ export interface SpawnSettings {
   order: number;
 }
 
+export interface TrailSettings {
+  /** Seconds a trail takes to fade away; 0 leaves none. */
+  fade: number;
+  /** Line width in px. The halftone prints it as a chain of dots, bigger and closer the wider and stronger it is. */
+  width: number;
+  /** How strongly its newest part prints, from 0 to 1. */
+  strength: number;
+}
+
+/** Butterflies and bees that now and then fly in, visit a few flowers and leave. */
+export interface InsectSettings {
+  enabled: boolean;
+  /** Average seconds between one arriving and the next. */
+  every: number;
+  /** The most in the bed at once. */
+  most: number;
+  /** Relative odds of a butterfly and a bee each time one comes. */
+  odds: [number, number];
+  /** Multiplier on their size, which follows the base flower size. */
+  size: number;
+  /** Multiplier on how fast they fly and beat their wings. */
+  speed: number;
+  /** Fewest and most flowers one visits before leaving; 0 passes straight through. */
+  visits: [number, number];
+  /** Shortest and longest stay on each flower, seconds. */
+  stay: [number, number];
+  trail: TrailSettings;
+}
+
 export interface FlowerSettings {
   layout: LayoutSettings;
   species: Record<Kind, Species>;
@@ -130,6 +159,7 @@ export interface FlowerSettings {
   sway: SwaySettings;
   cursor: CursorSettings;
   spawn: SpawnSettings;
+  insects: InsectSettings;
 }
 
 /** Any part of FlowerSettings. Arrays and ranges replace the default whole. */
@@ -159,6 +189,17 @@ export const DEFAULT_SETTINGS: FlowerSettings = {
   sway: { speed: 1, damping: 0.17, grassDamping: 0.1 },
   cursor: { strength: 0.055, limit: 3.5, rise: 0.5, fade: 2, reach: 0.55 },
   spawn: { enabled: true, duration: 1.5, grow: 0.5, climb: [0.25, 0.45], scatter: 0.1, order: 0.6 },
+  insects: {
+    enabled: true,
+    every: 18,
+    most: 3,
+    odds: [1, 1],
+    size: 1,
+    speed: 1,
+    visits: [0, 3],
+    stay: [1.5, 5],
+    trail: { fade: 2.5, width: 3.5, strength: 0.9 },
+  },
 };
 
 export function resolveSettings(input?: FlowerSettingsInput): FlowerSettings {

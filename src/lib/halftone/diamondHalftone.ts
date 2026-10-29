@@ -8,7 +8,8 @@
  * space, where every on-screen diamond is a square of SS × SS pixels. Each
  * diamond then averages its pixels into one tone, picks one of a few dot sizes
  * (an ordered dither chooses between the two nearest sizes), and takes the
- * nearest of a few shades.
+ * nearest of a few shades. Where blue marks most of a diamond's ink, it takes
+ * a shade of a second ramp, `accent`, instead.
  *
  * A second hidden canvas, the reveal, can be laid out the same way to scale
  * each dot, for animating dots in. What its colours mean is up to the caller.
@@ -33,14 +34,17 @@ let filters = 0;
  */
 export type DotScale = (r: number, g: number, b: number, x: number, y: number, i: number, j: number) => number;
 
-export interface HalftoneColors {
-  background: string;
+export interface HalftoneRamp {
   /** The ramp's light end. */
   light: string;
   /** The middle of the ramp. */
   ink: string;
   /** The ramp's dark end. */
   dark: string;
+}
+
+export interface HalftoneColors extends HalftoneRamp {
+  background: string;
 }
 
 /** `steps` dot sizes, evenly spaced from small to just overlapping their neighbours. */
@@ -60,6 +64,8 @@ export class DiamondHalftone {
   spread = 0.1;
   /** Where spread ink is cut back, from 0 to 1: lower keeps more of it. Takes effect on `applyInk`. */
   threshold = 0.3;
+  /** The ramp for ink the scene marks in blue. Without one, it prints in the main ramp. */
+  accent: HalftoneRamp | null = null;
 
   private ctx: CanvasRenderingContext2D;
   private scene = document.createElement("canvas");
@@ -73,8 +79,7 @@ export class DiamondHalftone {
   private iv0 = 0;
   private nu = 0;
   private nv = 0;
-  private palette: string[] = [];
-  private paletteKey = "";
+  private palettes = new Map<string, string[]>();
   private filter: InkFilter | null = null;
 
   constructor(private canvas: HTMLCanvasElement, public colors: HalftoneColors) {
@@ -168,8 +173,10 @@ export class DiamondHalftone {
     const steps = sizes.length;
     const half = cell / 2;
     const full = 255 * SS * SS;
-    const palette = this.shadesOfRamp();
+    const palette = this.shadesOf(this.colors);
+    const accent = this.shadesOf(this.accent ?? this.colors);
     const paths = palette.map(() => new Path2D());
+    const accentPaths = accent.map(() => new Path2D());
     const last = paths.length - 1;
 
     for (let cj = 0; cj < nv; cj++) {
@@ -177,11 +184,13 @@ export class DiamondHalftone {
       for (let ci = 0; ci < nu; ci++) {
         let ink = 0;
         let shade = 0;
+        let marked = 0;
         for (let sy = 0; sy < SS; sy++) {
           let p = (cj * SS + sy) * stride + ci * SS * 4;
           for (let sx = 0; sx < SS; sx++, p += 4) {
             ink += data[p];
             shade += data[p + 1];
+            marked += data[p + 2];
           }
         }
         if (ink === 0) continue;
@@ -212,7 +221,7 @@ export class DiamondHalftone {
           r *= scale!(mr / n, mg / n, mb / n, x, y, i, j);
           if (r < 0.1) continue;
         }
-        const path = paths[Math.round(Math.min(1, shade / ink) * last)];
+        const path = (marked * 2 > ink ? accentPaths : paths)[Math.round(Math.min(1, shade / ink) * last)];
         r *= ROUND;
         path.moveTo(x + r, y);
         path.arc(x, y, r, 0, TAU);
@@ -226,17 +235,23 @@ export class DiamondHalftone {
       ctx.fillStyle = palette[k];
       ctx.fill(path);
     });
+    accentPaths.forEach((path, k) => {
+      ctx.fillStyle = accent[k];
+      ctx.fill(path);
+    });
   }
 
-  private shadesOfRamp() {
-    const { light, ink, dark } = this.colors;
+  private shadesOf({ light, ink, dark }: HalftoneRamp) {
     const n = Math.max(1, Math.round(this.shades));
     const key = `${light} ${ink} ${dark} ${n}`;
-    if (key !== this.paletteKey) {
-      this.paletteKey = key;
-      this.palette = ramp([light, ink, dark], n);
+    let shades = this.palettes.get(key);
+    if (!shades) {
+      // Only the main ramp and the accent are in use at once, so drop what's left from earlier colours.
+      if (this.palettes.size > 4) this.palettes.clear();
+      shades = ramp([light, ink, dark], n);
+      this.palettes.set(key, shades);
     }
-    return this.palette;
+    return shades;
   }
 }
 

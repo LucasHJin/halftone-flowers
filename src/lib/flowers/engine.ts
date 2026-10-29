@@ -1,6 +1,8 @@
+import { opposite } from "../../utils/color";
 import { clamp } from "../../utils/math";
 import { DiamondHalftone, evenSizes, type HalftoneColors } from "../halftone";
 import { Garden } from "./garden";
+import type { InsectKind } from "./insects";
 import { paintGarden } from "./paint";
 import { resolveSettings, type FlowerSettings, type FlowerSettingsInput } from "./settings";
 import { spawnScale } from "./spawn";
@@ -23,7 +25,7 @@ export interface FlowerFieldOptions {
   steps?: number;
   /** Dot sizes as a share of a full diamond, by area, smallest first. Overrides `steps`. */
   sizes?: number[];
-  /** Background, and the colour ramp from `light` through `ink` to `dark` that every dot takes a shade of. */
+  /** Background, and the colour ramp from `light` through `ink` to `dark` that every dot takes a shade of. Insects print in the same ramp turned to the opposite hue. */
   colors?: Partial<HalftoneColors>;
   /** How many shades the colour ramp is split into. Default 15. */
   shades?: number;
@@ -37,15 +39,15 @@ export interface FlowerFieldOptions {
   density?: number;
   /** Fixes the arrangement. Without one, each mount grows a different bed. */
   seed?: number;
-  /** Finer tuning of the layout, species, shade, wind, sway, pointer and spawn. Anything left out keeps its default. */
+  /** Finer tuning of the layout, species, shade, wind, sway, pointer, spawn and insects. Anything left out keeps its default. */
   settings?: FlowerSettingsInput;
 }
 
 /**
  * Grows a garden on a canvas and keeps it swaying: fixed-timestep loop,
- * growing in on first show, re-layout on resize, pointer brushing, pausing
- * off-screen, and a still frame for prefers-reduced-motion. `update` takes
- * new options without growing in again.
+ * growing in on first show, re-layout on resize, pointer brushing, insects
+ * visiting, pausing off-screen, and a still frame without insects for
+ * prefers-reduced-motion. `update` takes new options without growing in again.
  */
 export class FlowerEngine {
   private settings: FlowerSettings;
@@ -66,6 +68,7 @@ export class FlowerEngine {
   constructor(private canvas: HTMLCanvasElement, private options: FlowerFieldOptions = {}) {
     this.seed = options.seed ?? (Math.random() * 2 ** 32) >>> 0;
     this.halftone = new DiamondHalftone(canvas, resolveColors(options.colors));
+    this.halftone.accent = oppositeRamp(this.halftone.colors);
     this.setDots(options);
     this.settings = resolveSettings(options.settings);
     this.garden = new Garden(this.settings);
@@ -107,10 +110,16 @@ export class FlowerEngine {
     this.garden.configure(settings);
     this.garden.wind = options.wind ?? 1;
     this.halftone.colors = resolveColors(options.colors);
+    this.halftone.accent = oppositeRamp(this.halftone.colors);
     this.setDots(options);
     this.halftone.applyInk();
     if (relayout) this.resize(true);
     else if (this.reducedMotion.matches) this.draw();
+  }
+
+  /** Sends a butterfly or bee in now, or one picked by the insect settings' odds. Nothing comes while motion is reduced. */
+  release(kind?: InsectKind) {
+    if (!this.reducedMotion.matches) this.garden.insects.release(kind);
   }
 
   destroy() {
@@ -184,6 +193,7 @@ export class FlowerEngine {
     if (this.reducedMotion.matches) {
       cancelAnimationFrame(this.raf);
       this.garden.endSpawn();
+      this.garden.insects.reset();
       this.draw();
     } else {
       this.schedule();
@@ -207,6 +217,10 @@ function resolveColors(colors: Partial<HalftoneColors> | undefined) {
     if (value) out[key] = value;
   }
   return out;
+}
+
+function oppositeRamp({ light, ink, dark }: HalftoneColors) {
+  return { light: opposite(light), ink: opposite(ink), dark: opposite(dark) };
 }
 
 /** The settings a garden is laid out from, as a string to compare. */

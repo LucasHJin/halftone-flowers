@@ -78,6 +78,11 @@ export function withHue(colour: string, hue: number, vividness = 1) {
   return fromLab(at(c));
 }
 
+/** `colour` on the opposite side of the OKLCH hue circle, just as light, and as vivid as the screen allows. */
+export function opposite(colour: string) {
+  return withHue(colour, hueOf(colour) + 180);
+}
+
 /** `n` colours evenly spaced along a ramp through `stops`, mixed in OKLab so the steps look even. */
 export function ramp(stops: string[], n: number): string[] {
   const labs = stops.map(toLab);
