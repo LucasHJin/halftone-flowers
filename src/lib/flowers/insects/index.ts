@@ -14,12 +14,12 @@ import { inAccent, inShade } from "../paint/tone";
 import type { Plant, Stem } from "../types";
 import { BEE } from "./bee";
 import { BUTTERFLY } from "./butterfly";
-import { DEPTH, ease, orient, perch, randomQuirks, steer, wrap, type Insect, type InsectKind, type InsectSpecies } from "./insect";
+import { DEPTH, ease, orient, perch, randomQuirks, steer, wrap, type Insect, type InsectGroup, type InsectKind } from "./insect";
 import { expire, extend, paintSegment, type Trail } from "./trail";
 
 export type { Insect, InsectKind } from "./insect";
 
-const SPECIES: Record<InsectKind, InsectSpecies> = { butterfly: BUTTERFLY, bee: BEE };
+const GROUPS: Record<InsectKind, InsectGroup> = { butterfly: BUTTERFLY, bee: BEE };
 
 /** How far in front of its flower a sitting insect is, in depth, so it's painted just over it. */
 const ON_TOP = 1e-4;
@@ -61,13 +61,18 @@ export class Insects {
       if (butterflies + bees <= 0) return;
       kind = Math.random() * (butterflies + bees) < butterflies ? "butterfly" : "bee";
     }
-    const sp = SPECIES[kind];
-    // Some a good deal bigger than others.
-    const size = this.garden.bloom * sp.size * settings.size * lerp(0.9, 1.3, Math.random());
+    const group = GROUPS[kind];
+    const species = pick(group.species.map((sp) => sp.odds));
+    const sp = group.species[species];
+    // Some a good deal bigger than others of their species.
+    const size = this.garden.bloom * group.size * sp.size * settings.size * lerp(0.9, 1.3, Math.random());
+    const quirks = randomQuirks();
+    quirks.pace *= sp.pace;
     const from = this.pickEdge();
-    const [x, y] = this.offEdge(from, size * 1.5);
+    let [x, y] = this.offEdge(from, size * 1.5);
     const b: Insect = {
       kind,
+      species,
       size,
       x,
       y,
@@ -90,8 +95,8 @@ export class Insects {
       exitX: 0,
       exitY: 0,
       age: 0,
-      wobble: [Math.random() * TAU, Math.random() * TAU, Math.random() * TAU, lerp(0.8, 1.25, Math.random())],
-      quirks: randomQuirks(),
+      wobble: [Math.random() * TAU, Math.random() * TAU, Math.random() * TAU, sp.weave * lerp(0.8, 1.25, Math.random())],
+      quirks,
       air: 1,
       flap: Math.random() * TAU,
       wing: 0,
@@ -101,17 +106,24 @@ export class Insects {
       pitch: 0,
       roll: 0,
       tilt: 0,
-      pattern: Math.floor(Math.random() * sp.patterns),
       trail: { points: [], owner: null },
     };
     b.trail.owner = b;
     this.moveOn(b, from);
     // Already on its way in, and facing that way.
     const goal = b.stem ? { ...perch(b.stem), z: b.plant!.depth } : { x: b.exitX, y: b.exitY, z: b.zGoal };
+    if (from === "top" && b.stem) {
+      // Off to the roomier side of its flower, so it comes down to it no steeper than it dives.
+      const W = this.garden.width;
+      const out = size * 1.5;
+      x = clamp(goal.x + Math.sign(W / 2 - goal.x || 1) * ((goal.y - y) / Math.tan(group.flight.dive)), -out, W + out);
+      b.x = x;
+      b.side = x < goal.x ? -1 : 1;
+    }
     const dx = goal.x - x;
     const dy = goal.y - y;
     const dz = (goal.z - b.z) * size * DEPTH;
-    const v = (sp.flight.cruise * size * b.quirks.pace * 0.7) / (Math.hypot(dx, dy, dz) || 1);
+    const v = (group.flight.cruise * size * b.quirks.pace * 0.7) / (Math.hypot(dx, dy, dz) || 1);
     b.vx = dx * v;
     b.vy = dy * v;
     b.vz = dz * v;
@@ -168,7 +180,7 @@ export class Insects {
         const z = clamp(insect.z, 0, 1);
         ctx.save();
         ctx.translate(insect.x, insect.y + insect.bob);
-        inAccent(() => inShade(shade * (z - 1), () => SPECIES[insect.kind].paint(ctx, insect, insect.size * lerp(0.85, 1.1, z))));
+        inAccent(() => inShade(shade * (z - 1), () => GROUPS[insect.kind].paint(ctx, insect, insect.size * lerp(0.85, 1.1, z))));
         ctx.restore();
       }
     }
@@ -176,8 +188,8 @@ export class Insects {
 
   private fly(b: Insect, dt: number) {
     const settings = this.garden.settings.insects;
-    const sp = SPECIES[b.kind];
-    const style = sp.flight;
+    const group = GROUPS[b.kind];
+    const style = group.flight;
     const speed = style.cruise * b.size * b.quirks.pace * settings.speed;
     b.age += dt;
     let face: [number, number] | undefined;
@@ -231,7 +243,7 @@ export class Insects {
         break;
     }
     orient(b, style, dt, face);
-    sp.animate(b, dt, settings.speed);
+    group.animate(b, dt, settings.speed);
     if (b.phase !== "landed" && settings.trail.fade > 0) extend(b.trail, b.x, b.y + b.bob, b.z, this.garden.time);
   }
 
@@ -248,7 +260,7 @@ export class Insects {
 
   /** Off its flower and on to the next, or away. */
   private takeOff(b: Insect) {
-    const lift = SPECIES[b.kind].flight.cruise * b.size * 0.4;
+    const lift = GROUPS[b.kind].flight.cruise * b.size * 0.4;
     this.moveOn(b);
     b.vy = -lift;
   }
@@ -259,7 +271,7 @@ export class Insects {
     if (!target) return this.leave(b, from && (from === "left" ? "right" : from === "right" ? "left" : b.x < this.garden.width / 2 ? "right" : "left"));
     b.visits--;
     b.phase = "flying";
-    b.hovers = Math.random() < SPECIES[b.kind].flight.hovers;
+    b.hovers = Math.random() < GROUPS[b.kind].flight.hovers;
     b.plant = target.plant;
     b.stem = target.stem;
     const p = perch(target.stem);
@@ -300,7 +312,7 @@ export class Insects {
    */
   private pickFlower(b: Insect): { plant: Plant; stem: Stem } | null {
     const { width: W, height: H } = this.garden;
-    const likes = SPECIES[b.kind].flight.likes;
+    const likes = GROUPS[b.kind].flight.likes;
     const m = b.size;
     const options: { plant: Plant; stem: Stem; weight: number }[] = [];
     let total = 0;
@@ -341,4 +353,14 @@ export class Insects {
   private gap() {
     return this.garden.settings.insects.every * clamp(-Math.log(1 - Math.random()), 0.3, 2.5);
   }
+}
+
+/** An index into `odds`, picked by them. */
+function pick(odds: readonly number[]) {
+  let r = Math.random() * odds.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < odds.length; i++) {
+    r -= odds[i];
+    if (r <= 0) return i;
+  }
+  return odds.length - 1;
 }

@@ -19,7 +19,9 @@ export const DEPTH = 5;
 
 export interface Insect {
   kind: InsectKind;
-  /** Px: a butterfly's half wingspan, about a bee's body length. */
+  /** Which of its kind's species it is, an index into its kind's `species`. */
+  species: number;
+  /** Px: about its body length. */
   size: number;
   x: number;
   y: number;
@@ -75,14 +77,12 @@ export interface Insect {
   roll: number;
   /** Turned in the screen, radians clockwise: the lean of the flower it sits on. */
   tilt: number;
-  /** Which of its kind's markings it has. */
-  pattern: number;
   trail: Trail;
 }
 
 /** How one insect differs from others of its kind, so no two look or fly alike. */
 export interface Quirks {
-  /** Multiple of its kind's flying speed, quickness and wing beat. */
+  /** Multiple of its kind's flying speed, quickness and wing beat, its species' and its own. */
   pace: number;
   /** Radians more nose up, and more banked right side down, than its flight alone holds it. */
   pitch: number;
@@ -116,6 +116,8 @@ export interface FlightStyle {
   wander: number;
   /** How often its heading strays, cycles a second. */
   wanderRate: number;
+  /** Steepest it flies down while well off its goal, radians below level. */
+  dive: number;
   /** Quick flicker on top of the wandering, radians. */
   flutter: number;
   /** Of the flowers it visits, the share it hovers by before deciding; it settles straight onto the rest. */
@@ -132,11 +134,24 @@ export interface FlightStyle {
   likes: Partial<Record<Kind, number>>;
 }
 
-export interface InsectSpecies {
+/** One species of a kind, against the others of its kind. */
+export interface Species {
+  name: string;
+  /** Multiple of its kind's size. */
+  size: number;
+  /** Multiple of its kind's flying speed and quickness. */
+  pace: number;
+  /** Multiple of how often its heading strays: higher jinks about more. */
+  weave: number;
+  /** Odds of one coming, against the others of its kind. */
+  odds: number;
+}
+
+/** What every insect of one kind shares, whatever its species. */
+export interface InsectGroup {
   /** Multiple of the base flower size. */
   size: number;
-  /** How many markings it can have. */
-  patterns: number;
+  species: readonly Species[];
   flight: FlightStyle;
   /** Moves its wings, bob and pitch on by `dt` seconds; `rate` multiplies the wing beat. */
   animate(b: Insect, dt: number, rate: number): void;
@@ -173,19 +188,39 @@ export function perch(s: Stem) {
 /**
  * Flies toward (gx, gy) at depth gz at up to `speed` px a second, slowing
  * within `slow` sizes of it. Far off, its heading strays to either side, so
- * into and out of the screen, and up and down. It speeds up, slows and turns
- * no harder than its style allows, so it swings round in curves. Returns the
- * distance to the goal before moving, px.
+ * into and out of the screen, and up and down, and a goal far below it comes
+ * down to in a sweeping curve, no steeper than its style's dive. It speeds up,
+ * slows and turns no harder than its style allows, so it swings round in
+ * curves. Returns the distance to the goal before moving, px.
  */
 export function steer(b: Insect, style: FlightStyle, gx: number, gy: number, gz: number, speed: number, dt: number, slow = 2.5) {
   const depth = b.size * DEPTH;
-  const dx = gx - b.x;
-  const dy = gy - b.y;
-  const dz = (gz - b.z) * depth;
+  let dx = gx - b.x;
+  let dy = gy - b.y;
+  let dz = (gz - b.z) * depth;
   const dist = Math.hypot(dx, dy, dz);
   const [p1, p2, p3, rate] = b.wobble;
   const t = b.age * style.wanderRate * rate * TAU;
   const far = clamp(dist / (b.size * 4) - 0.25, 0, 1);
+  // Too steeply below, it heads round the goal as well as toward it, the more the steeper, coming down at the steepest it may; it can drop onto it only from within half its size.
+  const flat = Math.hypot(dx, dz);
+  const steep = Math.atan2(dy, flat);
+  const limit = lerp(Math.PI / 2, style.dive, clamp(dist / b.size - 0.5, 0, 1));
+  if (steep > limit) {
+    let [tx, tz] = [Math.cos(b.yaw), Math.sin(b.yaw)];
+    let [ix, iz] = [tz, -tx];
+    if (flat > b.size * 0.25) {
+      [ix, iz] = [dx / flat, dz / flat];
+      // Round whichever way it's already going.
+      const turn = Math.sign(b.vz * ix - b.vx * iz) || 1;
+      [tx, tz] = [-iz * turn, ix * turn];
+    }
+    const round = ((steep - limit) / (Math.PI / 2 - limit)) * (Math.PI / 2);
+    const across = dist * Math.cos(limit);
+    dx = across * (ix * Math.cos(round) + tx * Math.sin(round));
+    dz = across * (iz * Math.cos(round) + tz * Math.sin(round));
+    dy = dist * Math.sin(limit);
+  }
   const turn = far * ((style.wander * (Math.sin(t + p1) + 0.6 * Math.sin(2.3 * t + p2))) / 1.6 + style.flutter * Math.sin(7.3 * t + p3));
   const rise = far * 0.4 * style.wander * Math.sin(1.7 * t + p3);
   const n = dist || 1;
