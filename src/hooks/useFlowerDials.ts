@@ -15,7 +15,7 @@ import {
 import { hueOf, withHue } from "../utils/color";
 import { clamp, TAU } from "../utils/math";
 
-const { layout, species, mix, tone, shade, wind, sway, cursor, spawn, insects } = DEFAULT_SETTINGS;
+const { layout, species, mix, tone, shade, wind, sway, cursor, spawn, insects, petals } = DEFAULT_SETTINGS;
 const KINDS = Object.keys(species) as Kind[];
 const LEAVES: LeafShape[] = ["lance", "strap", "oval"];
 
@@ -182,6 +182,16 @@ const CONFIG = {
     butterfly: { type: "action", label: "Send a butterfly" },
     bee: { type: "action", label: "Send a bee" },
   },
+  petals: {
+    _collapsed: true,
+    enabled: petals.enabled,
+    countMin: slider(petals.count[0], 0, 10, 1),
+    countMax: slider(petals.count[1], 0, 10, 1),
+    size: slider(petals.size, 0.3, 3, 0.05),
+    speed: slider(petals.speed, 0.2, 3, 0.05),
+    sink: slider(petals.sink, 0, 1, 0.01),
+    loops: slider(petals.loops, 0, 30, 0.5),
+  },
   layout: {
     _collapsed: true,
     density: slider(1, 0.2, 3, 0.05),
@@ -261,7 +271,7 @@ function toWave(d: ResolvedValues<ReturnType<typeof waveDials>>): WindWave {
 }
 
 function toOptions(v: Values, seed: number): FlowerFieldOptions {
-  const { halftone, colors, shade, layout, tone, wind, sway, cursor, spawn, insects } = v;
+  const { halftone, colors, shade, layout, tone, wind, sway, cursor, spawn, insects, petals } = v;
   return {
     cell: halftone.autoCell ? undefined : halftone.cell,
     steps: halftone.steps,
@@ -324,6 +334,14 @@ function toOptions(v: Values, seed: number): FlowerFieldOptions {
         visits: [insects.visitsMin, insects.visitsMax],
         stay: [insects.stayMin, insects.stayMax],
         trail: { fade: insects.trail.fade, width: insects.trail.width, strength: insects.trail.strength },
+      },
+      petals: {
+        enabled: petals.enabled,
+        count: [petals.countMin, petals.countMax],
+        size: petals.size,
+        speed: petals.speed,
+        sink: petals.sink,
+        loops: petals.loops,
       },
     },
   };

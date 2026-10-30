@@ -1,6 +1,6 @@
 /**
  * Everything about how the bed is laid out, sways, answers the pointer, grows
- * in and is visited by insects, with the values it ships with. FlowerField takes any part of this
+ * in, is visited by insects and sheds petals, with the values it ships with. FlowerField takes any part of this
  * as `settings` and fills in the rest from DEFAULT_SETTINGS.
  */
 import { mergeDeep, type DeepPartial } from "../../utils/merge";
@@ -151,6 +151,21 @@ export interface InsectSettings {
   trail: TrailSettings;
 }
 
+/** Petals that come loose when a flower is clicked or tapped, and drift away to the left or right. */
+export interface PetalSettings {
+  enabled: boolean;
+  /** Fewest and most that come loose with each click. */
+  count: [number, number];
+  /** Multiplier on their size, which follows their flower's. */
+  size: number;
+  /** Multiplier on how fast the wind carries them. */
+  speed: number;
+  /** Share that sink toward the ground rather than sail off far to one side. */
+  sink: number;
+  /** How many times a minute each loops the loop, on average; more often in a gust. */
+  loops: number;
+}
+
 export interface FlowerSettings {
   layout: LayoutSettings;
   species: Record<Kind, Species>;
@@ -162,6 +177,7 @@ export interface FlowerSettings {
   cursor: CursorSettings;
   spawn: SpawnSettings;
   insects: InsectSettings;
+  petals: PetalSettings;
 }
 
 /** Any part of FlowerSettings. Arrays and ranges replace the default whole. */
@@ -202,6 +218,7 @@ export const DEFAULT_SETTINGS: FlowerSettings = {
     stay: [1.5, 5],
     trail: { fade: 2.5, width: 3.5, strength: 0.9 },
   },
+  petals: { enabled: true, count: [1, 3], size: 1, speed: 1, sink: 0.4, loops: 8 },
 };
 
 export function resolveSettings(input?: FlowerSettingsInput): FlowerSettings {

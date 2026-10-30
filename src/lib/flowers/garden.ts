@@ -4,11 +4,15 @@
  * bottom. Each stem sways on a damped spring driven by the wind, so tall stems
  * lag and overshoot a little while short ones follow closely. The pointer stirs
  * up its own breeze through the same springs, so brushed flowers lean away and
- * drift back as unhurriedly as everything else.
+ * drift back as unhurriedly as everything else. A click or tap on a flower
+ * nods it the same way and shakes a few petals loose.
  */
 import { clamp, createRandom, lerp, TAU } from "../../utils/math";
 import type { FlowerSettings, Mix } from "./settings";
 import { Insects } from "./insects";
+import { Cover } from "./insects/cover";
+import { clearOf } from "./insects/insect";
+import { Petals } from "./petals";
 import { planSpawn, type SpawnPlan } from "./spawn";
 import { createStem, curvedStem, poseStem, SEGMENTS } from "./stem";
 import type { Head, Ink, Kind, Leaf, LeafShape, Plant, Stem } from "./types";
@@ -16,6 +20,9 @@ import { createWind, type Wind } from "./wind";
 
 /** How far along the meadow, as a share of its span, extra stems start growing in toward its thinner right end. */
 const THICKER_FROM = 0.3;
+
+/** How hard a click or tap nudges a flower: as hard as brushing this many px across it. */
+const TAP = 12;
 
 export interface GardenLayout {
   width: number;
@@ -40,8 +47,12 @@ export class Garden {
   spawnPlan: SpawnPlan | null = null;
   /** Butterflies and bees visiting. */
   insects: Insects;
+  /** Petals shaken loose, blowing away. */
+  petals: Petals;
   /** Base flower size, px. */
   bloom = 40;
+  /** Diamond width, px. */
+  cell = 8;
   private windAt: Wind;
   private nextId = 0;
   private rand: () => number = Math.random;
@@ -51,10 +62,13 @@ export class Garden {
   /** Where the pointer is, where it was at the last step, and its smoothed velocity. */
   private pointer = { x: 0, y: 0, lastX: 0, lastY: 0, vx: 0, vy: 0, live: false };
   private spawnFrom: number | null = null;
+  /** Which plant shows where, for telling which flower a click is on. */
+  private cover = new Cover();
 
   constructor(public settings: FlowerSettings) {
     this.windAt = createWind(settings.wind);
     this.insects = new Insects(this);
+    this.petals = new Petals(this);
   }
 
   /** Wind, sway, shade and the pointer follow new settings straight away; the rest waits for the next layout. */
@@ -67,6 +81,7 @@ export class Garden {
   layout({ width: W, height: H, cell, seed, density, spawn }: GardenLayout) {
     this.width = W;
     this.height = H;
+    this.cell = cell;
     this.rand = createRandom(seed);
     const rand = this.rand;
     const { flowerSize, stems, bouquet, meadow, grass, curveUp } = this.settings.layout;
@@ -156,8 +171,9 @@ export class Garden {
     this.spawnFrom = null;
     this.spawnPlan = spawn ? planSpawn(this.plants, W, H, seed, this.settings.spawn) : null;
     if (spawn) this.spawnFrom = this.time;
-    // They'd be sitting on flowers that are gone.
+    // They'd be sitting on flowers that are gone, or blowing across a bed that is.
     this.insects.reset();
+    this.petals.reset();
   }
 
   /** Seconds since the plants started growing in, or null once they're all in. */
@@ -212,6 +228,41 @@ export class Garden {
       }
     }
     this.insects.step(dt);
+    this.petals.step(dt);
+  }
+
+  /** How hard the wind blows at (x, y) now, in the same units as its settings, times the wind multiplier. */
+  windNow(x: number, y: number) {
+    return this.wind * this.windAt(x, y, this.time);
+  }
+
+  /**
+   * A click or tap at (x, y). The flower it's on nods as if brushed and shakes
+   * a few petals loose: the one that shows there, or failing that, where
+   * another plant's stem or leaf crosses it, the one it's furthest inside or
+   * closest to, within half the pointer's reach.
+   */
+  tap(x: number, y: number) {
+    if (!this.settings.petals.enabled || this.growing !== null) return;
+    this.cover.paint(this);
+    let hit: [Plant, Stem] | null = null;
+    let best = this.hand * 0.5;
+    for (const plant of this.plants) {
+      for (const s of plant.stems) {
+        if (!s.head) continue;
+        const clear = clearOf(s, x, y);
+        const score = clear <= 0 && this.cover.shows(x, y, plant.depth) ? clear - 1e6 : clear;
+        if (score < best) {
+          best = score;
+          hit = [plant, s];
+        }
+      }
+    }
+    if (!hit) return;
+    const [plant, s] = hit;
+    const { strength, limit } = this.settings.cursor;
+    s.gust = limit * Math.tanh((s.gust + strength * this.catches(s) * TAP) / limit);
+    this.petals.shed(plant, s);
   }
 
   /** The pointer moved to (x, y). Stems it passes through lean the way it's going, then drift back. */
@@ -264,12 +315,15 @@ export class Garden {
     }
     if (grip < 1e-3) return;
     // Only movement across the stem pushes it; how far, not how fast, so a flick is no rougher than a sweep.
-    // Short stems barely sway in the wind, so they catch more of it to visibly answer the pointer.
     const a = s.angle[at];
     const across = (vx * Math.cos(a) + vy * Math.sin(a)) * dt;
-    const catches = Math.sqrt((this.bloom * 8) / (s.segment * SEGMENTS));
     const { strength, limit } = this.settings.cursor;
-    s.gust = limit * Math.tanh((s.gust + strength * catches * grip * across) / limit);
+    s.gust = limit * Math.tanh((s.gust + strength * this.catches(s) * grip * across) / limit);
+  }
+
+  /** Short stems barely sway in the wind, so they catch more of the pointer's to visibly answer it. */
+  private catches(s: Stem) {
+    return Math.sqrt((this.bloom * 8) / (s.segment * SEGMENTS));
   }
 
   private between(a: number, b: number) {

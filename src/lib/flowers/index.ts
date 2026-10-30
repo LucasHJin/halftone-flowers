@@ -7,6 +7,7 @@ export {
   type InsectSettings,
   type LayoutSettings,
   type Mix,
+  type PetalSettings,
   type ShadeSettings,
   type SpawnSettings,
   type SwaySettings,

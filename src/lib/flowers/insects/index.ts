@@ -170,7 +170,7 @@ export class Insects {
     this.trails = this.trails.filter((t) => t.owner || t.points.length > 1);
   }
 
-  /** Gathers everything to paint in depth order, ready for paintBelow. */
+  /** Gathers everything to paint in depth order, ready for paintNext. */
   beginPaint() {
     const parts: Part[] = [];
     for (const trail of this.trails) {
@@ -183,21 +183,24 @@ export class Insects {
     this.next = 0;
   }
 
-  /** Paints whatever's left from beginPaint that's further back than `depth`. */
-  paintBelow(ctx: CanvasRenderingContext2D, depth: number) {
+  /** Depth of the next thing to paint, or Infinity once everything is painted. */
+  get nextDepth() {
+    return this.next < this.parts.length ? this.parts[this.next].z : Infinity;
+  }
+
+  /** Paints the next thing from beginPaint. */
+  paintNext(ctx: CanvasRenderingContext2D) {
     const { settings, time } = this.garden;
     const shade = settings.shade.depth;
-    while (this.next < this.parts.length && this.parts[this.next].z < depth) {
-      const { insect, trail, i } = this.parts[this.next++];
-      if (trail) paintSegment(ctx, trail, i, time, settings.insects.trail, shade);
-      else if (insect) {
-        // Nearer ones a little bigger and darker, as the flowers are.
-        const z = clamp(insect.z, 0, 1);
-        ctx.save();
-        ctx.translate(insect.x, insect.y + insect.bob);
-        inAccent(() => inShade(shade * (z - 1), () => GROUPS[insect.kind].paint(ctx, insect, insect.size * lerp(0.85, 1.1, z))));
-        ctx.restore();
-      }
+    const { insect, trail, i } = this.parts[this.next++];
+    if (trail) paintSegment(ctx, trail, i, time, settings.insects.trail, shade);
+    else if (insect) {
+      // Nearer ones a little bigger and darker, as the flowers are.
+      const z = clamp(insect.z, 0, 1);
+      ctx.save();
+      ctx.translate(insect.x, insect.y + insect.bob);
+      inAccent(() => inShade(shade * (z - 1), () => GROUPS[insect.kind].paint(ctx, insect, insect.size * lerp(0.85, 1.1, z))));
+      ctx.restore();
     }
   }
 

@@ -65,9 +65,9 @@ export interface FlowerFieldOptions {
 
 /**
  * Grows a garden on a canvas and keeps it swaying: fixed-timestep loop,
- * growing in on first show, re-layout on resize, pointer brushing, insects
- * visiting, pausing off-screen, and a still frame without insects for
- * prefers-reduced-motion. `update` takes new options without growing in again.
+ * growing in on first show, re-layout on resize, pointer brushing, petals
+ * shaken loose by a click, insects visiting, pausing off-screen, and a still
+ * frame without insects or petals for prefers-reduced-motion. `update` takes new options without growing in again.
  */
 export class FlowerEngine {
   private settings: FlowerSettings;
@@ -105,6 +105,8 @@ export class FlowerEngine {
 
     this.reducedMotion.addEventListener("change", this.onMotionPreference);
     window.addEventListener("pointermove", this.onPointerMove, { passive: true });
+    // On the canvas itself, so clicking anything laid over it doesn't count.
+    canvas.addEventListener("pointerdown", this.onPointerDown);
 
     this.resize();
     this.schedule();
@@ -152,6 +154,7 @@ export class FlowerEngine {
     this.intersectionObserver.disconnect();
     this.reducedMotion.removeEventListener("change", this.onMotionPreference);
     window.removeEventListener("pointermove", this.onPointerMove);
+    this.canvas.removeEventListener("pointerdown", this.onPointerDown);
   }
 
   /** Dot shape, sizes, shades and ink spread from the options. `applyInk` or a resize puts the spread on the canvas. */
@@ -219,6 +222,7 @@ export class FlowerEngine {
       cancelAnimationFrame(this.raf);
       this.garden.endSpawn();
       this.garden.insects.reset();
+      this.garden.petals.reset();
       this.draw();
     } else {
       this.schedule();
@@ -232,6 +236,13 @@ export class FlowerEngine {
     if (e.timeStamp - this.lastPointer > 150) this.garden.releasePointer();
     this.lastPointer = e.timeStamp;
     this.garden.movePointer(e.clientX - rect.left, e.clientY - rect.top);
+  };
+
+  /** Clicking or tapping a flower shakes a few petals loose. */
+  private onPointerDown = (e: PointerEvent) => {
+    if (!e.isPrimary || e.button !== 0 || this.reducedMotion.matches) return;
+    const rect = this.canvas.getBoundingClientRect();
+    this.garden.tap(e.clientX - rect.left, e.clientY - rect.top);
   };
 }
 

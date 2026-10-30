@@ -44,6 +44,13 @@ export class Cover {
     this.height = h;
   }
 
+  /** Whether a plant `depth` back is the nearest at (x, y) as last painted, so it's what shows there. */
+  shows(x: number, y: number, depth: number) {
+    const i = Math.floor(x * SCALE);
+    const j = Math.floor(y * SCALE);
+    return i >= 0 && j >= 0 && i < this.width && j < this.height && this.data[(j * this.width + i) * 4] === level(depth);
+  }
+
   /** The share of the disc of radius `r` px about (x, y) that plants nearer than `depth` hide, as last painted. Off the map counts as clear. */
   hidden(x: number, y: number, r: number, depth: number) {
     const near = level(depth);

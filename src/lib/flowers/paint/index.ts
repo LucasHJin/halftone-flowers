@@ -12,11 +12,10 @@
  * While the bed grows in, each plant is cut off above its growing front, so
  * whatever is behind shows through until it gets there.
  *
- * Insects and their trails are painted among the plants by depth.
+ * Insects, their trails and loose petals are painted among the plants by depth.
  */
 import type { Garden } from "../garden";
 import { spawnColor, spawnFront } from "../spawn";
-import { createRandom } from "../../../utils/math";
 import type { ShadeSettings } from "../settings";
 import { SEGMENTS } from "../stem";
 import type { Plant, Stem } from "../types";
@@ -31,18 +30,27 @@ import { paintPlume } from "./heads/plume";
 import { paintReflexed } from "./heads/reflexed";
 import { paintSpike } from "./heads/spike";
 import { paintTrumpet } from "./heads/trumpet";
-import { aimLight, inLight, inMask, inShade, setLight } from "./tone";
+import { aimLight, inLight, inMask, inShade, plantShade, setLight } from "./tone";
 
-/** Paints the garden's tone image, or with `mask`, the spawn mask in the same shapes, without insects. */
+/** Things that move among the plants, painted between them furthest back first. */
+interface Movers {
+  /** Gathers them in depth order. */
+  beginPaint(): void;
+  /** Depth of the next one to paint, or Infinity once they're all painted. */
+  readonly nextDepth: number;
+  paintNext(ctx: CanvasRenderingContext2D): void;
+}
+
+/** Paints the garden's tone image, or with `mask`, the spawn mask in the same shapes, without insects or petals. */
 export function paintGarden(ctx: CanvasRenderingContext2D, garden: Garden, mask = false) {
   const growing = garden.growing;
   const plan = garden.spawnPlan;
   const { shade } = garden.settings;
-  const insects = mask ? null : garden.insects;
+  const movers: Movers[] = mask ? [] : [garden.insects, garden.petals];
   setLight(shade.light);
-  insects?.beginPaint();
+  for (const m of movers) m.beginPaint();
   for (const plant of garden.plants) {
-    insects?.paintBelow(ctx, plant.depth);
+    paintMovers(ctx, movers, plant.depth);
     if (growing === null || !plan || !plant.spawn) {
       paintPlant(ctx, plant, garden.time, shade);
       continue;
@@ -58,7 +66,17 @@ export function paintGarden(ctx: CanvasRenderingContext2D, garden: Garden, mask 
     else paintPlant(ctx, plant, garden.time, shade);
     ctx.restore();
   }
-  insects?.paintBelow(ctx, Infinity);
+  paintMovers(ctx, movers, Infinity);
+}
+
+/** Paints whatever's left of `movers` that's further back than `depth`, furthest back first, whichever kind it is. */
+function paintMovers(ctx: CanvasRenderingContext2D, movers: Movers[], depth: number) {
+  for (;;) {
+    let first: Movers | null = null;
+    for (const m of movers) if (m.nextDepth < depth && (!first || m.nextDepth < first.nextDepth)) first = m;
+    if (!first) return;
+    first.paintNext(ctx);
+  }
 }
 
 /** Paints every plant flat in `colour(plant)`, nearer ones over those further back, fully grown and without insects. */
@@ -67,9 +85,7 @@ export function paintSilhouettes(ctx: CanvasRenderingContext2D, garden: Garden, 
 }
 
 function paintPlant(ctx: CanvasRenderingContext2D, plant: Plant, t: number, shade: ShadeSettings) {
-  // Lighter toward the back, plus a nudge of the plant's own that holds steady from frame to frame.
-  const by = shade.depth * (plant.depth - 1) + shade.jitter * (2 * createRandom(plant.stems[0].id)() - 1);
-  inShade(by, () => {
+  inShade(plantShade(plant, shade), () => {
     for (const s of plant.stems) paintStem(ctx, s);
     for (const s of plant.stems) for (const leaf of s.leaves) paintLeaf(ctx, s, leaf, t);
     // Branch heads first, so the main flower sits on top.

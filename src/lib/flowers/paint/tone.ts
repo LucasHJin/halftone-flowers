@@ -1,7 +1,8 @@
 /** Shared drawing helpers for the tone image. */
-import { clamp, lerp, TAU } from "../../../utils/math";
+import { clamp, createRandom, lerp, TAU } from "../../../utils/math";
+import type { ShadeSettings } from "../settings";
 import { SEGMENTS } from "../stem";
-import type { Ink, Stem } from "../types";
+import type { Ink, Plant, Stem } from "../types";
 
 /** Each ink's place on the colour ramp, from 0 light to 1 dark. */
 const RAMP: Record<Ink, number> = { 0: 0.5, 1: 1, 2: 0 };
@@ -32,6 +33,11 @@ export function inAccent(paint: () => void) {
   } finally {
     accent = false;
   }
+}
+
+/** How far along the ramp a plant prints from the rest: lighter toward the back, plus a nudge of its own that holds steady from frame to frame. */
+export function plantShade(plant: Plant, shade: ShadeSettings) {
+  return shade.depth * (plant.depth - 1) + shade.jitter * (2 * createRandom(plant.stems[0].id)() - 1);
 }
 
 /** Runs `paint` with every ink moved `by` along the colour ramp, toward dark if positive. */
