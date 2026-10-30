@@ -1,13 +1,14 @@
 /**
- * Turns a tone image into a halftone of dots on a diamond lattice, each dot
- * one shade of a colour ramp. Dots are round, or diamonds with their sides
- * curved in.
+ * Turns a tone image into a halftone of dots, each dot one shade of a colour
+ * ramp. Dots sit on a diamond lattice, in staggered rows, or on a straight
+ * grid of rows and columns. They're round, square, or diamonds with their
+ * sides curved in.
  *
  * Scenes draw into a hidden canvas in screen coordinates: red is how much ink a
  * spot wants, green that times how far along the ramp, from light to dark, its
- * colour sits. The canvas's transform rotates and scales them into lattice
- * space, where every on-screen diamond is a square of SS × SS pixels. Each
- * diamond then averages its pixels into one tone, picks one of a few dot sizes
+ * colour sits. The canvas's transform turns and scales them into lattice
+ * space, where every cell of the lattice is a square of SS × SS pixels. Each
+ * cell then averages its pixels into one tone, picks one of a few dot sizes
  * (an ordered dither chooses between the two nearest sizes), and takes the
  * nearest of a few shades. Where blue marks most of a diamond's ink, it takes
  * a shade of a second ramp, `accent`, instead.
@@ -26,11 +27,18 @@ const SS = 2;
 const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 /** Radius of a circle with the area of a diamond of half-diagonal 1, so each size prints the same tone whatever the shape. */
 const ROUND = Math.sqrt(2 / Math.PI);
+/** Half the side of a square with the area of a diamond of half-diagonal 1. */
+const SQUARE = Math.SQRT1_2;
+/** How far each dot shape's ink spreads, as a share of `spread`: diamonds half as far, so their points survive, and squares not at all, as any spread rounds their corners. */
+const SPREAD: Record<DotShape, number> = { round: 1, diamond: 0.5, square: 0 };
 const SVG = "http://www.w3.org/2000/svg";
 let filters = 0;
 
-/** Round, or a diamond pointing up, down and to the sides with its sides curved in. */
-export type DotShape = "round" | "diamond";
+/** Staggered rows, each half a step along from the next, on a lattice of diamonds turned 45° like a print screen; or straight rows and columns. */
+export type Grid = "diagonal" | "straight";
+
+/** Round, a square with level sides, or a diamond pointing up, down and to the sides with its sides curved in. */
+export type DotShape = "round" | "square" | "diamond";
 
 /**
  * Size multiplier for the dot of diamond (i, j), centred at (x, y), from the
@@ -67,7 +75,8 @@ export class DiamondHalftone {
   /**
    * How far ink spreads before it sets, as a share of a diamond's width; 0
    * keeps every dot its own shape. Diamond dots spread half as far, so their
-   * points and curved sides survive. Takes effect on `applyInk`.
+   * points and curved sides survive, and square dots not at all, so they keep
+   * their corners. Takes effect on `applyInk`.
    */
   spread = 0.1;
   /** Where spread ink is cut back, from 0 to 1: lower keeps more of it. Takes effect on `applyInk`. */
@@ -78,6 +87,8 @@ export class DiamondHalftone {
   dot: DotShape = "round";
   /** How far a diamond dot's sides curve in, from 0 straight to 1 a four-pointed star. */
   curve = 0.75;
+  /** Where the dots sit, with as many to an area either way. Takes effect on the next resize. */
+  grid: Grid = "diagonal";
 
   private ctx: CanvasRenderingContext2D;
   private scene = document.createElement("canvas");
@@ -108,12 +119,21 @@ export class DiamondHalftone {
     this.dpr = dpr;
     this.canvas.width = Math.round(width * dpr);
     this.canvas.height = Math.round(height * dpr);
-    // Diamond (i, j) is centred on screen at ((i - j) * cell / 2, (i + j) * cell / 2).
-    const w = this.cell;
-    this.iu0 = -1;
-    this.iv0 = Math.floor(-width / w) - 1;
-    this.nu = Math.ceil((width + height) / w) + 2 - this.iu0;
-    this.nv = Math.ceil(height / w) + 2 - this.iv0;
+    if (this.grid === "straight") {
+      // Cell (i, j) is centred on screen at (i, j) times the pitch.
+      const p = this.pitch;
+      this.iu0 = -1;
+      this.iv0 = -1;
+      this.nu = Math.ceil(width / p) + 3;
+      this.nv = Math.ceil(height / p) + 3;
+    } else {
+      // Diamond (i, j) is centred on screen at ((i - j) * cell / 2, (i + j) * cell / 2).
+      const w = this.cell;
+      this.iu0 = -1;
+      this.iv0 = Math.floor(-width / w) - 1;
+      this.nu = Math.ceil((width + height) / w) + 2 - this.iu0;
+      this.nv = Math.ceil(height / w) + 2 - this.iv0;
+    }
     this.scene.width = this.nu * SS;
     this.scene.height = this.nv * SS;
     this.applyInk();
@@ -125,7 +145,7 @@ export class DiamondHalftone {
    * the background. With no spread it passes them through uncut.
    */
   applyInk() {
-    const blur = Math.max(0, this.spread * this.cell * (this.dot === "diamond" ? 0.5 : 1));
+    const blur = Math.max(0, this.spread * this.cell * SPREAD[this.dot]);
     const f = (this.filter ??= createInkFilter());
     // Steep enough that the cut edge is about one device px wide, so it stays smooth without blurring.
     const sharp = blur > 0 ? Math.max(1, 2.5 * blur * this.dpr) : 1;
@@ -165,10 +185,21 @@ export class DiamondHalftone {
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.fillStyle = "#000";
     c.fillRect(0, 0, c.canvas.width, c.canvas.height);
-    // u = (x + y) / w and v = (y - x) / w, offset so cell iu0 starts at pixel 0.
-    const k = SS / this.cell;
-    c.setTransform(k, -k, k, k, (0.5 - this.iu0) * SS, (0.5 - this.iv0) * SS);
+    if (this.grid === "straight") {
+      // u = x / p and v = y / p, offset so cell iu0 starts at pixel 0.
+      const k = SS / this.pitch;
+      c.setTransform(k, 0, 0, k, (0.5 - this.iu0) * SS, (0.5 - this.iv0) * SS);
+    } else {
+      // u = (x + y) / w and v = (y - x) / w, offset so cell iu0 starts at pixel 0.
+      const k = SS / this.cell;
+      c.setTransform(k, -k, k, k, (0.5 - this.iu0) * SS, (0.5 - this.iv0) * SS);
+    }
     return c;
+  }
+
+  /** Spacing of the straight grid's rows and columns: each cell has a diamond's area. */
+  private get pitch() {
+    return this.cell * Math.SQRT1_2;
   }
 
   /** Halftones whatever was drawn since beginScene onto the visible canvas, each dot scaled by `scale` if given. */
@@ -185,7 +216,9 @@ export class DiamondHalftone {
     const paths = palette.map(() => new Path2D());
     const accentPaths = accent.map(() => new Path2D());
     const last = paths.length - 1;
-    const round = this.dot === "round";
+    const dot = this.dot;
+    const straight = this.grid === "straight";
+    const pitch = this.pitch;
     const curve = clamp(this.curve, 0, 1);
     // Each curved side cuts 2/3 of the triangle under its control point from a plain diamond; the tips reach further to make up for it.
     const tip = 1 / Math.sqrt(1 - (2 * curve) / 3);
@@ -206,8 +239,8 @@ export class DiamondHalftone {
         }
         if (ink === 0) continue;
         const i = iu0 + ci;
-        const x = (i - j) * half;
-        const y = (i + j) * half;
+        const x = straight ? i * pitch : (i - j) * half;
+        const y = straight ? j * pitch : (i + j) * half;
         if (x < -cell || y < -cell || x > this.width + cell || y > this.height + cell) continue;
 
         // Where shapes meet, the cell is as covered as all of them together, in their average shade.
@@ -233,10 +266,13 @@ export class DiamondHalftone {
           if (r < 0.1) continue;
         }
         const path = (marked * 2 > ink ? accentPaths : paths)[Math.round(Math.min(1, shade / ink) * last)];
-        if (round) {
+        if (dot === "round") {
           r *= ROUND;
           path.moveTo(x + r, y);
           path.arc(x, y, r, 0, TAU);
+        } else if (dot === "square") {
+          r *= SQUARE;
+          path.rect(x - r, y - r, r * 2, r * 2);
         } else {
           r *= tip;
           const c = (r * (1 - curve)) / 2;

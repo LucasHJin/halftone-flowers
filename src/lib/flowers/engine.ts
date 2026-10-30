@@ -1,6 +1,6 @@
 import { lightnessOf, opposite, withLightness } from "../../utils/color";
 import { clamp } from "../../utils/math";
-import { DiamondHalftone, evenSizes, type DotShape, type HalftoneColors } from "../halftone";
+import { DiamondHalftone, evenSizes, type DotShape, type Grid, type HalftoneColors } from "../halftone";
 import { Garden } from "./garden";
 import type { InsectKind } from "./insects";
 import { paintGarden } from "./paint";
@@ -47,10 +47,12 @@ export interface FlowerFieldOptions {
   spread?: number;
   /** Where spread ink is cut back, from 0 to 1: lower keeps more of it, so dots swell and merge more. Default 0.26. */
   threshold?: number;
-  /** Round dots, or diamonds with their sides curved in by `curve`. Each size prints the same tone either way; diamonds spread half as far. Default round. */
+  /** Round dots, squares with level sides, or diamonds with their sides curved in by `curve`. Each size prints the same tone whatever the shape; diamonds spread half as far and squares not at all. Default round. */
   dot?: DotShape;
   /** How far a diamond dot's sides curve in, from 0 straight to 1 a four-pointed star. Default 0.75. */
   curve?: number;
+  /** Dots in staggered rows, like a print screen, or in straight rows and columns, with as many to an area either way. Default diagonal. */
+  grid?: Grid;
   /** Multiplier on how far the wind bends the stems. Default 1. */
   wind?: number;
   /** Multiplier on the number of stems. Default 1. */
@@ -122,6 +124,8 @@ export class FlowerEngine {
       options.cell !== before.cell ||
       (options.density ?? 1) !== (before.density ?? 1) ||
       bedKey(settings) !== bedKey(this.settings);
+    // The halftone lays its lattice out again, but the bed stays as it is.
+    const regrid = (options.grid ?? "diagonal") !== (before.grid ?? "diagonal");
     this.options = options;
     this.seed = seed;
     this.settings = settings;
@@ -131,7 +135,7 @@ export class FlowerEngine {
     this.halftone.accent = oppositeRamp(this.halftone.colors);
     this.setDots(options);
     this.halftone.applyInk();
-    if (relayout) this.resize(true);
+    if (relayout || regrid) this.resize(relayout);
     else if (this.reducedMotion.matches) this.draw();
   }
 
@@ -151,9 +155,10 @@ export class FlowerEngine {
   }
 
   /** Dot shape, sizes, shades and ink spread from the options. `applyInk` or a resize puts the spread on the canvas. */
-  private setDots({ sizes, steps, shades, spread, threshold, dot, curve }: FlowerFieldOptions) {
+  private setDots({ sizes, steps, shades, spread, threshold, dot, curve, grid }: FlowerFieldOptions) {
     this.halftone.dot = dot ?? "round";
     this.halftone.curve = curve ?? 0.75;
+    this.halftone.grid = grid ?? "diagonal";
     this.halftone.sizes = sizes?.length ? sizes : evenSizes(steps ?? 6);
     this.halftone.shades = shades ?? 15;
     this.halftone.spread = spread ?? 0.1;
