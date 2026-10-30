@@ -2,14 +2,18 @@ import { lerp } from "../../../../utils/math";
 import type { Head, Stem } from "../../types";
 import { along, tone } from "../tone";
 
+/** Steps up a plume between its pairs of hairs, so it has one more pair than this. */
+export const HAIR_STEPS = 24;
+
 /** Feathery grass plumes: fine hairs swept up and back along the top of the stem. */
 export function paintPlume(ctx: CanvasRenderingContext2D, s: Stem, h: Head, t: number) {
-  const n = 24;
+  const n = HAIR_STEPS;
   const start = 1 - h.reach;
   ctx.lineCap = "round";
   for (let pass = 0; pass < 2; pass++) {
     ctx.beginPath();
     for (let i = pass; i <= n; i += 2) {
+      if (h.lost.has(i)) continue;
       const k = i / n;
       const p = along(s, start + (1 - start) * k);
       const len = h.radius * lerp(1, 0.35, k) * h.jitter[0] * (0.8 + 0.4 * ((i * 7) % 5) / 4);

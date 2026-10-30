@@ -12,6 +12,7 @@ export function paintReflexed(ctx: CanvasRenderingContext2D, h: Head) {
   const f = headFrame(h.face, h.turn);
   const parts: Part[] = [];
   for (let k = 0; k < 6; k++) {
+    if (h.lost.has(k)) continue;
     const phi = h.spin + ((k + h.drift[k]) / 6) * TAU;
     const p = petal(f, phi, {
       start: [R * 0.08, R * 0.12],

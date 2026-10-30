@@ -185,8 +185,6 @@ const CONFIG = {
   petals: {
     _collapsed: true,
     enabled: petals.enabled,
-    countMin: slider(petals.count[0], 0, 10, 1),
-    countMax: slider(petals.count[1], 0, 10, 1),
     size: slider(petals.size, 0.3, 3, 0.05),
     speed: slider(petals.speed, 0.2, 3, 0.05),
     sink: slider(petals.sink, 0, 1, 0.01),
@@ -337,7 +335,6 @@ function toOptions(v: Values, seed: number): FlowerFieldOptions {
       },
       petals: {
         enabled: petals.enabled,
-        count: [petals.countMin, petals.countMax],
         size: petals.size,
         speed: petals.speed,
         sink: petals.sink,

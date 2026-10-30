@@ -8,7 +8,7 @@ export function paintSpike(ctx: CanvasRenderingContext2D, s: Stem, h: Head) {
   const start = 1 - h.reach;
   for (let i = 0; i < n; i++) {
     // Lavender leaves gaps between its whorls.
-    if (h.style === 2 && i % 2 === 1 && i < n - 3) continue;
+    if ((h.style === 2 && i % 2 === 1 && i < n - 3) || h.lost.has(i)) continue;
     const k = i / (n - 1);
     const p = along(s, start + (1 - start) * k * 0.96);
     const size = h.radius * lerp(1, 0.4, k) * h.jitter[i];

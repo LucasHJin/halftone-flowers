@@ -1,6 +1,6 @@
 import { clamp, TAU } from "../../../../utils/math";
 import type { Head } from "../../types";
-import { litBy, tone } from "../tone";
+import { blob, litBy, tone } from "../tone";
 import { fillPetal, headFrame, paintInDepth, petal, type Part } from "./petals";
 
 /**
@@ -13,6 +13,11 @@ export function paintIris(ctx: CanvasRenderingContext2D, h: Head) {
   const f = headFrame(h.face, h.turn);
   const beard = h.centre === 2 ? 0 : 2;
   const parts: Part[] = [];
+  if (h.lost.size) {
+    // The swelling at the top of the stem the petals grew from, hidden while they're all there.
+    ctx.fillStyle = tone(1, 0.75, litBy(-0.5, -0.5));
+    blob(ctx, 0, -R * 0.08, R * 0.14, R * 0.18, 0);
+  }
   for (let k = 0; k < 3; k++) {
     const up = petal(f, h.spin + ((k + h.drift[k]) / 3) * TAU, {
       start: [R * 0.05, R * 0.15],
@@ -34,7 +39,7 @@ export function paintIris(ctx: CanvasRenderingContext2D, h: Head) {
       // Folded down the middle, so a fall seen side-on still shows its depth.
       cup: 0.7,
     });
-    parts.push({
+    if (!h.lost.has(k)) parts.push({
       z: up.z,
       paint: () => {
         const near = clamp(up.z / R, -1, 1);
@@ -42,7 +47,7 @@ export function paintIris(ctx: CanvasRenderingContext2D, h: Head) {
         fillPetal(ctx, up);
       },
     });
-    parts.push({
+    if (!h.lost.has(k + 3)) parts.push({
       z: down.z,
       paint: () => {
         const near = clamp(down.z / R, -1, 1);

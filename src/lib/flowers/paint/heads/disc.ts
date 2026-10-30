@@ -24,6 +24,7 @@ export function paintDisc(ctx: CanvasRenderingContext2D, s: Stem, h: Head, t: nu
   ctx.transform(a, 0, c, d, 0, 0);
   const n = h.petals;
   for (let k = 0; k < n; k++) {
+    if (h.lost.has(k)) continue;
     // Lilies have an outer ring of three and an inner ring of three, drawn on top and a little shorter.
     const lily = h.kind === "lily";
     const ring = lily ? Math.floor((k * 2) / n) : 0;

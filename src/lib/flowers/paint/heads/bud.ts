@@ -14,7 +14,8 @@ export function paintBud(ctx: CanvasRenderingContext2D, s: Stem, h: Head) {
   ctx.bezierCurveTo(w * 0.7, -0.75 * L, w, -0.1 * L, 0, 0.05 * L);
   ctx.fillStyle = acrossLight(ctx, 0, -0.45 * L, w, 1, s.tone + 0.15, sun);
   ctx.fill();
-  // Petal colour showing through at the tip.
+  // Petal colour showing through at the tip, until it's shaken off.
+  if (h.lost.has(0)) return;
   ctx.beginPath();
   ctx.moveTo(-w * 0.42, -0.55 * L);
   ctx.bezierCurveTo(-w * 0.35, -0.8 * L, -w * 0.15, -0.95 * L, 0, -L);

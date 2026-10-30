@@ -8,10 +8,19 @@
  * Each is drawn about its middle, its base toward -x and its tip toward +x.
  * Seen alone and small, a loose petal is drawn a little bigger than on its
  * flower, and never so small that its shape is lost among the dots.
+ *
+ * Petals are told apart by the index each is drawn at on its head, which is
+ * what a head's `lost` holds once they're shaken off.
  */
 import { lerp, TAU } from "../../../utils/math";
+import { SEGMENTS } from "../stem";
 import type { Head, Ink, Stem } from "../types";
-import { blob, lightStrength, tone } from "./tone";
+import { florets } from "./heads/cluster";
+import { cupSectors, cupShape } from "./heads/cup";
+import { RINGS } from "./heads/globe";
+import { headFrame, point } from "./heads/petals";
+import { HAIR_STEPS } from "./heads/plume";
+import { along, blob, lightStrength, tone } from "./tone";
 
 /** Paints a loose petal moved `by` along the ramp, for which side of it faces you. */
 export type LoosePaint = (ctx: CanvasRenderingContext2D, by: number) => void;
@@ -20,36 +29,48 @@ export interface LooseLook {
   paint: LoosePaint;
   /** Px across its longest way. */
   length: number;
+  /** How many times bigger it's drawn than it was on its flower. */
+  scale: number;
 }
+
+/** Turns a petal `length` by `width` px on its flower into the size it's drawn loose, at least `least` dots long and `wide` across. */
+type Fit = (length: number, width: number, least?: number, wide?: number) => [number, number];
 
 /** How much bigger than on its flower a loose petal is drawn, at least; small ones are drawn bigger still to reach their fewest dots long. */
 const EXAGGERATE = 1.15;
 
-/** Fewest dots across a loose petal, so its outline still shows. */
+/** Most times bigger than on its flower a loose petal is drawn, so one off a small flower isn't out of all proportion to it. */
+const MOST_GROWN = 1.8;
+
+/** Fewest dots across a loose petal, so its outline still shows, unless that would make it as wide as it's long. */
 const MIN_WIDE = 1.8;
 
-/** One petal, floret or wisp from the head on `s`, `size` times as big as it would otherwise be. */
-export function looseLook(s: Stem, h: Head, cell: number, size: number): LooseLook {
+/** Petal `k` of the head on `s` as it looks loose, `size` times as big as it would otherwise be. */
+export function looseLook(s: Stem, h: Head, k: number, cell: number, size: number): LooseLook {
+  let scale = 1;
+  // Bigger than on the flower, and if it can be without growing out of proportion, at least `least` dots long and `wide` across.
+  const fit: Fit = (length, width, least = 4.5, wide = MIN_WIDE) => {
+    scale = size * Math.min(MOST_GROWN, Math.max(EXAGGERATE, (cell * least) / length));
+    const L = length * scale;
+    return [L, Math.max(width * scale, Math.min(cell * wide * size, L * 0.45))];
+  };
+  return { ...shapeOf(s, h, k, cell, fit), scale };
+}
+
+function shapeOf(s: Stem, h: Head, k: number, cell: number, fit: Fit): Omit<LooseLook, "scale"> {
   const R = h.radius;
   const rand = Math.random;
-  // Which of its petals came off, for how long that one was.
-  const k = Math.floor(rand() * h.jitter.length);
-  const jitter = h.jitter[k];
+  const jitter = h.jitter[k % h.jitter.length];
   // White petals blush toward the centre's ink at the base.
   const base: Ink = h.blush ? h.centre : h.ink;
   const amount = h.tone;
   // Which way it curls.
   const side = rand() < 0.5 ? -1 : 1;
-  /** `length` by `width` px as drawn loose: bigger than on the flower, at least `least` dots long and MIN_WIDE across. */
-  const fit = (length: number, width: number, least = 4.5): [number, number] => {
-    const scale = size * Math.max(EXAGGERATE, (cell * least) / length);
-    return [length * scale, Math.max(width * scale, cell * MIN_WIDE * size)];
-  };
 
   switch (h.kind) {
     case "daisy": {
       // A long, narrow ray, blunt at the tip; the more rays the daisy has, the narrower each.
-      const [L, W] = fit(R * 0.95 * jitter, 2 * R * Math.min(0.11, 1.25 / h.petals), 6);
+      const [L, W] = fit(R * 0.95 * jitter, 2 * R * Math.min(0.11, 1.25 / h.petals), 6, 1.1);
       const b = blade(L, W, side * lerp(0, 0.35, rand()), [0.12, 0.2]);
       return { length: L, paint: (ctx, by) => fill(ctx, b.path, ribFill(ctx, b.rib, h.ink, amount, by, base)) };
     }
@@ -61,7 +82,7 @@ export function looseLook(s: Stem, h: Head, cell: number, size: number): LooseLo
     }
     case "lily": {
       // Long and pointed, curving back at the tip, with a stripe down the middle in its stamens' ink. The inner three are shorter.
-      const [L, W] = fit(R * (rand() < 0.5 ? 0.82 : 1) * jitter, R * 0.46, 6);
+      const [L, W] = fit(R * (Math.floor((k * 2) / h.petals) ? 0.82 : 1) * jitter, R * 0.46, 6);
       const b = blade(L, W, side * lerp(0.3, 0.7, rand()), [0.5, 0.9]);
       const stripe: Ink = h.centre === 2 ? 1 : h.centre;
       return {
@@ -92,7 +113,7 @@ export function looseLook(s: Stem, h: Head, cell: number, size: number): LooseLo
       };
     }
     case "iris": {
-      if (rand() < 0.5) {
+      if (k < 3) {
         // A standard: broad, cupped and ruffled.
         const [L, W] = fit(R * 1.05 * jitter, R * 0.62, 5);
         const b = blade(L, W, side * lerp(0.7, 1.1, rand()), [0.6, 0.45], 0.25);
@@ -160,37 +181,23 @@ export function looseLook(s: Stem, h: Head, cell: number, size: number): LooseLo
       };
     }
     case "peony": {
-      // Big, cupped and ruffled into lobes, deep at the base and pale at the edge. Mostly the broad outer ones fall.
-      const [length, width] = rand() < 0.6 ? [1, 0.75] : rand() < 0.6 ? [0.85, 0.6] : [0.7, 0.52];
-      const [L] = fit(R * length * jitter, R * width);
+      // Big, cupped and ruffled into lobes, deep at the base and pale at the edge, as long and broad as its ring's.
+      const ring = ringOf(k);
+      const [L] = fit(R * ring.length * jitter, R * ring.width);
       const ruffle = rand() * TAU;
       const path = fan(L, 1.15, (t) => rounded(t, 0.5) * (1 + 0.1 * Math.sin(3 * Math.PI * t + ruffle)));
       return { length: L, paint: (ctx, by) => fill(ctx, path, fanFill(ctx, L, h.ink, amount, by, h.ink, 0.1)) };
     }
     case "bud": {
-      // Its petals still furled in their sepals, showing their colour only at the tip.
-      const [L, W] = fit(R * 1.1, R * 0.78);
-      const w = W / 1.4;
-      const body = new Path2D();
-      body.moveTo(-0.55 * L, 0);
-      body.bezierCurveTo(-0.4 * L, -w, 0.25 * L, -0.7 * w, 0.5 * L, 0);
-      body.bezierCurveTo(0.25 * L, 0.7 * w, -0.4 * L, w, -0.55 * L, 0);
-      const tip = new Path2D();
-      tip.moveTo(0.05 * L, -0.42 * w);
-      tip.bezierCurveTo(0.3 * L, -0.35 * w, 0.45 * L, -0.15 * w, 0.5 * L, 0);
-      tip.bezierCurveTo(0.45 * L, 0.15 * w, 0.3 * L, 0.35 * w, 0.05 * L, 0.42 * w);
-      tip.quadraticCurveTo(0.12 * L, 0, 0.05 * L, -0.42 * w);
-      return {
-        length: L,
-        paint: (ctx, by) => {
-          fill(ctx, body, tone(1, s.tone + 0.15, by));
-          fill(ctx, tip, tone(h.ink, amount, by));
-        },
-      };
+      // The tip of its furled petals, the only part of them that showed: narrow and pointed.
+      const [L, W] = fit(R * 0.55, R * 0.3);
+      const b = blade(L, W, side * lerp(0, 0.3, rand()), [0.5, 0.6]);
+      return { length: L, paint: (ctx, by) => fill(ctx, b.path, ribFill(ctx, b.rib, h.ink, amount, by)) };
     }
     case "cluster": {
-      // A whole floret: five round petals about a deeper eye.
-      const [L] = fit(R * 0.4 * jitter, R * 0.4, 4);
+      // A whole floret: five round petals about a deeper eye, smaller off a fork.
+      const size = florets(s, h, 0)[k].size;
+      const [L] = fit(R * 0.4 * size, R * 0.4 * size, 4);
       const turn = rand() * TAU;
       return {
         length: L,
@@ -207,7 +214,7 @@ export function looseLook(s: Stem, h: Head, cell: number, size: number): LooseLo
     }
     case "spike": {
       // Smaller toward the top of the spike.
-      const floret = R * lerp(0.5, 1, rand()) * jitter;
+      const floret = R * lerp(1, 0.4, k / (h.petals - 1)) * jitter;
       if (h.style === 1) {
         // A foxglove bell, flared at the end, with its dark mouth.
         const [L] = fit(floret * 2.4, floret * 1.4, 5);
@@ -274,6 +281,127 @@ export function looseLook(s: Stem, h: Head, cell: number, size: number): LooseLo
       };
     }
   }
+}
+
+/** The indices a head draws its petals at (or its florets, or its pairs of plume hairs), whether or not they've been shaken off. */
+export function petalIndices(s: Stem, h: Head): number[] {
+  const all = (n: number) => Array.from({ length: n }, (_, i) => i);
+  switch (h.kind) {
+    case "poppy":
+    case "tulip":
+    case "rose":
+      return all(cupSectors(h).length);
+    case "bud":
+      return [0];
+    case "cluster":
+      return all(florets(s, h, 0).length);
+    case "spike":
+      // Lavender leaves gaps between its whorls (see paintSpike).
+      return all(h.petals).filter((i) => !(h.style === 2 && i % 2 === 1 && i < h.petals - 3));
+    case "plume":
+      return all(HAIR_STEPS + 1);
+    default:
+      return all(h.petals);
+  }
+}
+
+/**
+ * Where petal `k` of the head on `s` is on screen as it's posed at time `t`,
+ * and which way it points out from the middle of the head, radians clockwise
+ * from rightward. Near enough to where its head draws it for one to take over
+ * from the other.
+ */
+export function petalAt(s: Stem, h: Head, k: number, t: number) {
+  const R = h.radius;
+  if (h.kind === "spike" || h.kind === "plume") {
+    const start = 1 - h.reach;
+    const p = along(s, h.kind === "spike" ? start + (1 - start) * (k / (h.petals - 1)) * 0.96 : start + ((1 - start) * k) / HAIR_STEPS);
+    // Off to one side of the stem; (cos a, sin a) is the stem's right.
+    const a = p.a + (k % 2 ? 0 : Math.PI);
+    return { x: p.x + Math.cos(a) * R * 0.6, y: p.y + Math.sin(a) * R * 0.6, a };
+  }
+  // Where it is in the head's own frame at the top of the stem, and the middle it points out from.
+  let x = 0;
+  let y = 0;
+  let cx = 0;
+  let cy = 0;
+  switch (h.kind) {
+    case "daisy":
+    case "cosmos":
+    case "lily": {
+      // Halfway out along it, on the disc tilted as paintDisc tilts it.
+      const n = h.petals;
+      const ring = h.kind === "lily" ? Math.floor((k * 2) / n) : 0;
+      const slot = h.kind === "lily" ? (k % (n / 2)) * 2 + ring : k;
+      const phi = h.spin + ((slot + h.drift[k]) / n) * TAU;
+      const u = Math.cos(phi) * R * h.jitter[k] * 0.55;
+      const v = Math.sin(phi) * R * h.jitter[k] * 0.55;
+      cy = -R * (0.12 + 0.3 * (1 - h.face));
+      x = Math.cos(h.turn) * u + Math.sqrt(1 - h.face * h.face) * Math.sin(h.turn) * v;
+      y = cy + h.face * v;
+      break;
+    }
+    case "turksCap":
+    case "daffodil": {
+      const phi = h.spin + ((k + h.drift[k]) / 6) * TAU;
+      [x, y] = point(headFrame(h.face, h.turn), phi, R * 0.5, h.kind === "turksCap" ? R * 0.25 : 0);
+      break;
+    }
+    case "iris": {
+      // Standards stand up over the middle, falls reach out and down between them.
+      const up = k < 3;
+      const phi = h.spin + (((k % 3) + (up ? 0 : 0.5) + h.drift[k]) / 3) * TAU;
+      [x, y] = point(headFrame(h.face, h.turn), phi, R * (up ? 0.3 : 0.7), R * (up ? 0.6 : 0.1));
+      break;
+    }
+    case "peony": {
+      const ring = ringOf(k);
+      const phi = h.spin + ((ring.at + 0.5 * ring.index + h.drift[k]) / ring.n) * TAU;
+      const half = R * ring.length * 0.5;
+      [x, y] = point(headFrame(h.face, h.turn), phi, R * ring.start[0] + half * Math.cos(ring.heading), R * ring.start[1] + half * Math.sin(ring.heading));
+      break;
+    }
+    case "poppy":
+    case "tulip":
+    case "rose": {
+      // On the side of the bowl, in the middle of its sector, skewed as the cup is.
+      const cup = cupShape(h);
+      const [from, to] = cupSectors(h)[k];
+      const a = (from + to) / 2;
+      y = -cup.height * 0.7 * cup.cosT + cup.widest * Math.sin(a) * cup.sinT;
+      x = cup.widest * Math.cos(a) + cup.skew * y;
+      cy = cup.top * 0.5;
+      cx = cup.skew * cy;
+      break;
+    }
+    case "cluster": {
+      const f = florets(s, h, t)[k];
+      x = f.x;
+      y = f.y;
+      break;
+    }
+    case "bud": {
+      // Its tip, leaning the way the head is turned (see paintBud).
+      const lean = -0.4 * Math.sin(h.turn);
+      y = -0.85 * R * 1.1;
+      x = lean * y;
+      cy = -0.45 * R * 1.1;
+      cx = lean * cy;
+      break;
+    }
+  }
+  const turn = s.angle[SEGMENTS - 1] + s.nod;
+  const cos = Math.cos(turn);
+  const sin = Math.sin(turn);
+  return { x: s.x[SEGMENTS] + x * cos - y * sin, y: s.y[SEGMENTS] + x * sin + y * cos, a: turn + Math.atan2(y - cy, x - cx) };
+}
+
+/** The ring of a peony's petal `k` is in (see paintGlobe), with which ring it is and where in it the petal comes. */
+function ringOf(k: number) {
+  let at = k;
+  let index = 0;
+  while (index < RINGS.length - 1 && at >= RINGS[index].n) at -= RINGS[index++].n;
+  return { ...RINGS[index], index, at };
 }
 
 function fill(ctx: CanvasRenderingContext2D, path: Path2D, style: string | CanvasGradient) {

@@ -238,7 +238,7 @@ export class FlowerEngine {
     this.garden.movePointer(e.clientX - rect.left, e.clientY - rect.top);
   };
 
-  /** Clicking or tapping a flower shakes a few petals loose. */
+  /** Clicking or tapping a flower shakes a petal loose. */
   private onPointerDown = (e: PointerEvent) => {
     if (!e.isPrimary || e.button !== 0 || this.reducedMotion.matches) return;
     const rect = this.canvas.getBoundingClientRect();

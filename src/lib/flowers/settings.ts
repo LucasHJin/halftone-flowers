@@ -151,11 +151,9 @@ export interface InsectSettings {
   trail: TrailSettings;
 }
 
-/** Petals that come loose when a flower is clicked or tapped, and drift away to the left or right. */
+/** Petals that come loose, one a click, when a flower is clicked or tapped, and drift away to the left or right. */
 export interface PetalSettings {
   enabled: boolean;
-  /** Fewest and most that come loose with each click. */
-  count: [number, number];
   /** Multiplier on their size, which follows their flower's. */
   size: number;
   /** Multiplier on how fast the wind carries them. */
@@ -218,7 +216,7 @@ export const DEFAULT_SETTINGS: FlowerSettings = {
     stay: [1.5, 5],
     trail: { fade: 2.5, width: 3.5, strength: 0.9 },
   },
-  petals: { enabled: true, count: [1, 3], size: 1, speed: 1, sink: 0.4, loops: 8 },
+  petals: { enabled: true, size: 1, speed: 1, sink: 0.4, loops: 8 },
 };
 
 export function resolveSettings(input?: FlowerSettingsInput): FlowerSettings {

@@ -5,7 +5,7 @@
  * lag and overshoot a little while short ones follow closely. The pointer stirs
  * up its own breeze through the same springs, so brushed flowers lean away and
  * drift back as unhurriedly as everything else. A click or tap on a flower
- * nods it the same way and shakes a few petals loose.
+ * nods it the same way and shakes a petal loose.
  */
 import { clamp, createRandom, lerp, TAU } from "../../utils/math";
 import type { FlowerSettings, Mix } from "./settings";
@@ -238,7 +238,7 @@ export class Garden {
 
   /**
    * A click or tap at (x, y). The flower it's on nods as if brushed and shakes
-   * a few petals loose: the one that shows there, or failing that, where
+   * a petal loose: the one that shows there, or failing that, where
    * another plant's stem or leaf crosses it, the one it's furthest inside or
    * closest to, within half the pointer's reach.
    */
@@ -433,6 +433,7 @@ export class Garden {
       drift: Array.from({ length: Math.max(petals, 1) }, () => this.between(-1, 1) * sp.drift),
       reach: kind === "plume" ? this.between(0.22, 0.35) : this.between(0.3, 0.5),
       style,
+      lost: new Set(),
     };
   }
 

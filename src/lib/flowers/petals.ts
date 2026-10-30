@@ -1,10 +1,12 @@
 /**
- * Petals shaken loose by clicking or tapping a flower. Each lifts off the
- * flower and drifts away to the left or the right along a wandering curve,
+ * Petals shaken loose by clicking or tapping a flower, one a click as it nods,
+ * until it has none left. Each comes off right where it was on the
+ * flower, at the size it was there, and grows a little as it lifts off to the
+ * size it's drawn loose (see looseLook), looking like a petal from that
+ * flower. It drifts away to the left or the right along a wandering curve,
  * some sailing far across the bed, others sinking toward the ground, now and
- * then looping the loop, turning and rocking as they go. They don't fade:
- * each keeps going until it's off the screen. Each looks like a petal from
- * the flower it came off (see looseLook).
+ * then looping the loop, turning and rocking as it goes. None fade: each keeps
+ * going until it's off the screen.
  *
  * Each keeps the depth of the flower it came from, just in front of it, so it
  * passes over plants further back and behind nearer ones, and never changes
@@ -12,9 +14,9 @@
  */
 import { clamp, lerp, TAU } from "../../utils/math";
 import type { Garden } from "./garden";
-import { ease, perch, wrap } from "./insects/insect";
-import { looseLook, type LoosePaint } from "./paint/loose";
-import { along, inLight, inShade, lightStrength, plantShade } from "./paint/tone";
+import { ease, wrap } from "./insects/insect";
+import { looseLook, petalAt, petalIndices, type LoosePaint } from "./paint/loose";
+import { inLight, inShade, lightStrength, plantShade } from "./paint/tone";
 import type { Plant, Stem } from "./types";
 
 /** The most loose at once; past this, a click still nods the flower but shakes no more off. */
@@ -31,6 +33,17 @@ const WANDER = 0.8;
 
 /** Seconds after one loop before another can start. */
 const CALM = 3;
+
+/** Seconds a petal takes to grow from its size on the flower to its size loose. */
+const GROW = 0.45;
+
+/** A petal about to come off: the flower it's on, which of its petals it is, and when, in garden seconds. */
+interface Coming {
+  plant: Plant;
+  stem: Stem;
+  k: number;
+  at: number;
+}
 
 interface LoosePetal {
   x: number;
@@ -65,10 +78,13 @@ interface LoosePetal {
   paint: LoosePaint;
   /** Px across its longest way. */
   length: number;
+  /** Its size as it came off, as a share of its size loose. */
+  from: number;
 }
 
 export class Petals {
   list: LoosePetal[] = [];
+  private coming: Coming[] = [];
   private order: LoosePetal[] = [];
   private next = 0;
 
@@ -77,62 +93,62 @@ export class Petals {
   /** Clears them all away, for a newly laid out bed. */
   reset() {
     this.list = [];
+    this.coming = [];
   }
 
-  /** Shakes a few petals, as many as the settings say, loose from the head on `s`. */
+  /** Shakes one of the petals the head on `s` has left off it, a moment into its nod. */
   shed(plant: Plant, s: Stem) {
-    const { cell, settings } = this.garden;
-    const { count, size, sink } = settings.petals;
     const h = s.head!;
-    const n = Math.round(lerp(count[0] - 0.49, count[1] + 0.49, Math.random()));
-    for (let i = 0; i < n && this.list.length < MOST; i++) {
-      const look = looseLook(s, h, cell, size);
-      let x: number;
-      let y: number;
-      // Pointing out from the middle of the flower, where it was growing.
-      let out: number;
-      if (h.kind === "spike" || h.kind === "plume") {
-        const p = along(s, 1 - h.reach * Math.random());
-        out = p.a + (Math.random() < 0.5 ? 0 : Math.PI);
-        x = p.x + Math.cos(out) * h.radius * 0.6;
-        y = p.y + Math.sin(out) * h.radius * 0.6;
-      } else {
-        const p = perch(s);
-        out = Math.random() * TAU;
-        const r = h.radius * lerp(0.25, 0.6, Math.random());
-        x = p.x + Math.cos(out) * r;
-        y = p.y + Math.sin(out) * r;
-      }
-      const side = Math.random() < 0.5 ? -1 : 1;
-      // Lifting off upward or out to its side before it settles into drifting, starting from still.
-      const lift = lerp(-1.7, 0.1, Math.random());
-      this.list.push({
-        x,
-        y,
-        z: plant.depth + ON_TOP,
-        plant,
-        side,
-        heading: side > 0 ? lift : Math.PI - lift,
-        speed: 0,
-        cruise: this.garden.bloom * lerp(1.8, 3, Math.random()),
-        aim: Math.random() < sink ? lerp(0.7, 1.1, Math.random()) : lerp(0.02, 0.3, Math.random()),
-        age: 0,
-        wander: [Math.random() * TAU, Math.random() * TAU, TAU * lerp(0.15, 0.35, Math.random())],
-        loop: null,
-        calm: lerp(0.8, 2, Math.random()),
-        spin: out,
-        spinRate: (Math.random() < 0.5 ? -1 : 1) * lerp(0.4, 1.6, Math.random()),
-        flip: Math.random() * TAU,
-        flipRate: (Math.random() < 0.5 ? -1 : 1) * lerp(1, 2.5, Math.random()),
-        paint: look.paint,
-        length: look.length,
-      });
-    }
+    const left = petalIndices(s, h).filter((k) => !h.lost.has(k) && !this.coming.some((c) => c.stem === s && c.k === k));
+    if (!left.length || this.list.length + this.coming.length >= MOST) return;
+    // A peony's outer petals go first.
+    const k = left[Math.floor(Math.random() * (h.kind === "peony" ? Math.min(3, left.length) : left.length))];
+    this.coming.push({ plant, stem: s, k, at: this.garden.time + lerp(0.05, 0.15, Math.random()) });
+  }
+
+  /** Petal `k` comes off its head, right where it was. */
+  private loosen({ plant, stem: s, k }: Coming) {
+    const { cell, settings, time, bloom } = this.garden;
+    const { size, sink } = settings.petals;
+    const h = s.head!;
+    h.lost.add(k);
+    const look = looseLook(s, h, k, cell, size);
+    const at = petalAt(s, h, k, time);
+    // Mostly off to the side it was on, setting out the way it pointed and lifting, from still.
+    const side = Math.cos(at.a) + lerp(-0.6, 0.6, Math.random()) >= 0 ? 1 : -1;
+    this.list.push({
+      x: at.x,
+      y: at.y,
+      z: plant.depth + ON_TOP,
+      plant,
+      side,
+      heading: Math.atan2(Math.sin(at.a) - 0.8, Math.cos(at.a)),
+      speed: 0,
+      cruise: bloom * lerp(1.8, 3, Math.random()),
+      aim: Math.random() < sink ? lerp(0.7, 1.1, Math.random()) : lerp(0.02, 0.3, Math.random()),
+      age: 0,
+      wander: [Math.random() * TAU, Math.random() * TAU, TAU * lerp(0.15, 0.35, Math.random())],
+      loop: null,
+      calm: lerp(0.8, 2, Math.random()),
+      // Lying as it lay on the flower, facing you.
+      spin: at.a,
+      spinRate: (Math.random() < 0.5 ? -1 : 1) * lerp(0.4, 1.6, Math.random()),
+      flip: 0,
+      flipRate: (Math.random() < 0.5 ? -1 : 1) * lerp(1, 2.5, Math.random()),
+      paint: look.paint,
+      length: look.length,
+      from: Math.min(1, 1 / look.scale),
+    });
   }
 
   step(dt: number) {
     const garden = this.garden;
     const { speed, loops } = garden.settings.petals;
+    this.coming = this.coming.filter((c) => {
+      if (c.at > garden.time) return true;
+      this.loosen(c);
+      return false;
+    });
     for (const p of this.list) {
       p.age += dt;
       // Livelier and flatter in a gust, whichever way it's going, and faster going down than up, as if it had a little weight.
@@ -187,10 +203,13 @@ export class Petals {
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(p.spin);
+    // Coming off, it grows quickly at first, then settles into its loose size and shading.
+    const off = 1 - (1 - Math.min(p.age / GROW, 1)) ** 3;
+    const grown = lerp(p.from, 1, off);
     // Rolling about its length it narrows and opens out again, but never past half its width, so its shape still shows.
-    ctx.scale(1, Math.max(Math.abs(face), 0.55));
+    ctx.scale(grown, grown * Math.max(Math.abs(face), 0.55));
     // Its inner face prints lighter than its back.
-    inShade(plantShade(p.plant, this.garden.settings.shade), () => inLight(() => p.paint(ctx, -lightStrength() * face)));
+    inShade(plantShade(p.plant, this.garden.settings.shade), () => inLight(() => p.paint(ctx, -lightStrength() * face * off)));
     ctx.restore();
   }
 }

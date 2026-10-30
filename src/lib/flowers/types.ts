@@ -45,6 +45,8 @@ export interface Head {
   reach: number;
   /** Spikes: 0 lupine, 1 foxglove, 2 lavender. Clusters: 1 forks the pedicels. */
   style: number;
+  /** The petals, florets or plume hairs shaken off it, by the index each is drawn at. */
+  lost: Set<number>;
 }
 
 export interface Leaf {

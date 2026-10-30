@@ -12,6 +12,7 @@ export function paintTrumpet(ctx: CanvasRenderingContext2D, h: Head) {
   const f = headFrame(h.face, h.turn);
   const parts: Part[] = [];
   for (let k = 0; k < 6; k++) {
+    if (h.lost.has(k)) continue;
     // Three outer petals, and three inner ones a little narrower and shorter.
     const inner = k % 2;
     const phi = h.spin + ((k + h.drift[k]) / 6) * TAU;
