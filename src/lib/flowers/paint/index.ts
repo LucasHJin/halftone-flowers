@@ -61,6 +61,11 @@ export function paintGarden(ctx: CanvasRenderingContext2D, garden: Garden, mask 
   insects?.paintBelow(ctx, Infinity);
 }
 
+/** Paints every plant flat in `colour(plant)`, nearer ones over those further back, fully grown and without insects. */
+export function paintSilhouettes(ctx: CanvasRenderingContext2D, garden: Garden, colour: (plant: Plant) => string) {
+  for (const plant of garden.plants) inMask(colour(plant), () => paintPlant(ctx, plant, garden.time, garden.settings.shade));
+}
+
 function paintPlant(ctx: CanvasRenderingContext2D, plant: Plant, t: number, shade: ShadeSettings) {
   // Lighter toward the back, plus a nudge of the plant's own that holds steady from frame to frame.
   const by = shade.depth * (plant.depth - 1) + shade.jitter * (2 * createRandom(plant.stems[0].id)() - 1);

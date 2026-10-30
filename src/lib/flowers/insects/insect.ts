@@ -17,6 +17,15 @@ export type Phase = "flying" | "hovering" | "alighting" | "landed" | "leaving";
 /** How many of an insect's sizes it flies to cross the bed from back to front. */
 export const DEPTH = 5;
 
+/** How far an insect reaches out from its middle, as a share of its size: it's over a flower's head once it's this close to it. */
+export const REACH = 0.5;
+
+/** One flower head on a plant. */
+export interface Flower {
+  plant: Plant;
+  stem: Stem;
+}
+
 export interface Insect {
   kind: InsectKind;
   /** Which of its kind's species it is, an index into its kind's `species`. */
@@ -41,6 +50,8 @@ export interface Insect {
   /** The flower it's flying to or sitting on. */
   plant: Plant | null;
   stem: Stem | null;
+  /** The flower it last sat on or hovered by, until it's well clear of it. */
+  last: Flower | null;
   /** Which side of the flower it hovers: -1 left, 1 right. */
   side: number;
   /** Whether it hovers by the flower it's flying to before deciding to settle, or settles straight away. */
@@ -183,6 +194,37 @@ export function perch(s: Stem) {
   // A disc sits further out the more it's tilted (see paintDisc).
   const out = h.radius * (MIDDLE[h.kind] ?? 0.12 + 0.3 * (1 - h.face));
   return { x: s.x[SEGMENTS] + Math.sin(angle) * out, y: s.y[SEGMENTS] - Math.cos(angle) * out, angle };
+}
+
+/** How far (x, y) is outside the head on `s` as it's posed now, px; negative over it. */
+export function clearOf(s: Stem, x: number, y: number) {
+  const h = s.head!;
+  if (h.kind === "spike" || h.kind === "plume") {
+    // Florets or hairs all along the top of the stem, the lowest spike florets reaching out furthest.
+    let d = Infinity;
+    for (let k = Math.floor(SEGMENTS * (1 - h.reach)); k < SEGMENTS; k++) {
+      const ax = s.x[k];
+      const ay = s.y[k];
+      const bx = s.x[k + 1] - ax;
+      const by = s.y[k + 1] - ay;
+      const u = clamp(((x - ax) * bx + (y - ay) * by) / (bx * bx + by * by || 1), 0, 1);
+      d = Math.min(d, Math.hypot(ax + bx * u - x, ay + by * u - y));
+    }
+    return d - h.radius * (h.kind === "spike" ? 1.5 : 1);
+  }
+  const p = perch(s);
+  return Math.hypot(x - p.x, y - p.y) - h.radius * 1.1;
+}
+
+/** A point `margin` px clear of the head on `s`, straight out from its middle the way (dx, dy) points, or toward `side` if that's nowhere. */
+export function beside(s: Stem, dx: number, dy: number, margin: number, side: number): [number, number] {
+  const p = perch(s);
+  const d = Math.hypot(dx, dy);
+  const [ux, uy] = d > 1 ? [dx / d, dy / d] : [side, 0];
+  const step = Math.max(2, margin / 4);
+  let t = 0;
+  while (t < 2000 && clearOf(s, p.x + ux * t, p.y + uy * t) < margin) t += step;
+  return [p.x + ux * t, p.y + uy * t];
 }
 
 /**
