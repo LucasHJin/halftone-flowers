@@ -23,6 +23,8 @@ export interface LayoutSettings {
   meadow: {
     /** Short stems per tall stem. */
     amount: number;
+    /** How many more stems, more varied in height, grow toward its right end, where it's shorter and smaller: none extra 30% of the way along, rising to this many times as many again at the end. */
+    thicken: number;
     /** Where it starts and ends across the width, as shares of it. */
     span: [number, number];
     /** How tall it grows at its left and right ends, as shares of the height. */
@@ -170,7 +172,7 @@ export const DEFAULT_SETTINGS: FlowerSettings = {
     flowerSize: { share: 0.055, min: 24, max: 68 },
     stems: { spacing: 62, min: 10, max: 26 },
     bouquet: { reach: [0.62, 0.74], inner: 0.42, roots: 0.3 },
-    meadow: { amount: 0.8, span: [0.14, 0.92], height: [0.27, 0.08], slant: [-0.25, 0.95], scatter: 0.8 },
+    meadow: { amount: 0.8, thicken: 1, span: [0.14, 0.92], height: [0.27, 0.08], slant: [-0.25, 0.95], scatter: 0.8 },
     grass: { corner: 0.7, bottom: 0.9 },
     curveUp: 0.35,
   },

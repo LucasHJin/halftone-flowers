@@ -203,6 +203,7 @@ const CONFIG = {
     },
     meadow: {
       amount: slider(layout.meadow.amount, 0, 2, 0.05),
+      thicken: slider(layout.meadow.thicken, 0, 4, 0.1),
       spanStart: slider(layout.meadow.span[0], 0, 1, 0.01),
       spanEnd: slider(layout.meadow.span[1], 0, 1, 0.01),
       heightLeft: slider(layout.meadow.height[0], 0, 0.8, 0.01),
@@ -282,6 +283,7 @@ function toOptions(v: Values, seed: number): FlowerFieldOptions {
         bouquet: { reach: [layout.bouquet.reachAcross, layout.bouquet.reachUp], inner: layout.bouquet.inner, roots: layout.bouquet.roots },
         meadow: {
           amount: layout.meadow.amount,
+          thicken: layout.meadow.thicken,
           span: [layout.meadow.spanStart, layout.meadow.spanEnd],
           height: [layout.meadow.heightLeft, layout.meadow.heightRight],
           slant: [layout.meadow.slantMin, layout.meadow.slantMax],

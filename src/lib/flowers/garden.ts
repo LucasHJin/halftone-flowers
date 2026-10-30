@@ -14,6 +14,9 @@ import { createStem, curvedStem, poseStem, SEGMENTS } from "./stem";
 import type { Head, Ink, Kind, Leaf, LeafShape, Plant, Stem } from "./types";
 import { createWind, type Wind } from "./wind";
 
+/** How far along the meadow, as a share of its span, extra stems start growing in toward its thinner right end. */
+const THICKER_FROM = 0.3;
+
 export interface GardenLayout {
   width: number;
   height: number;
@@ -124,6 +127,21 @@ export class Garden {
       blade.tone = lerp(tone.grass[0], tone.grass[1], depth);
       blade.flex = this.between(0.13, 0.2);
       this.plants.push({ depth, stems: [blade], spawn: null });
+    }
+
+    // More of the meadow toward its right end, where it's shortest and smallest, so it doesn't thin out into an even row: none extra
+    // from THICKER_FROM along, rising to `thicken` times as many again at the end. Last from the seed, so changing how many doesn't
+    // reshuffle the rest of the bed.
+    const extra = shortKinds.length ? Math.round(low * meadow.thicken * (1 - THICKER_FROM) / 2) : 0;
+    for (let i = 0; i < extra; i++) {
+      const depth = rand();
+      // Each near its own share of the stretch, the shares narrowing as it thickens.
+      const along = lerp(THICKER_FROM, 1, Math.sqrt(clamp((i + 0.5 + (rand() - 0.5) * meadow.scatter) / extra, 0, 1)));
+      const rootX = W * lerp(meadow.span[0], meadow.span[1], along);
+      // Mostly a little under the meadow's height where it stands, now and then well over it.
+      const tall = H * lerp(meadow.height[0], meadow.height[1], along) * (0.5 + 0.9 * rand() ** 1.6);
+      const headX = rootX + tall * this.between(...meadow.slant);
+      this.plant(this.pick(shortKinds), rootX, H + this.between(5, 25), headX, H - tall, depth, lerp(0.85, 0.6, along) * this.between(0.85, 1.15), false);
     }
 
     this.plants.sort((a, b) => a.depth - b.depth);
