@@ -4,6 +4,7 @@ import { DiamondHalftone, evenSizes, type DotShape, type Grid, type HalftoneColo
 import { Garden } from "./garden";
 import type { InsectKind } from "./insects";
 import { paintGarden } from "./paint";
+import { PointerInk } from "./pointerInk";
 import { resolveSettings, type FlowerSettings, type FlowerSettingsInput } from "./settings";
 import { spawnScale } from "./spawn";
 
@@ -65,14 +66,16 @@ export interface FlowerFieldOptions {
 
 /**
  * Grows a garden on a canvas and keeps it swaying: fixed-timestep loop,
- * growing in on first show, re-layout on resize, pointer brushing, petals
- * shaken loose by a click, insects visiting, pausing off-screen, and a still
- * frame without insects or petals for prefers-reduced-motion. `update` takes new options without growing in again.
+ * growing in on first show, re-layout on resize, pointer brushing, a trail
+ * behind the pointer, petals shaken loose and a splash of dots by a click,
+ * insects visiting, pausing off-screen, and a still frame without insects,
+ * petals or the pointer's trail and splash for prefers-reduced-motion. `update` takes new options without growing in again.
  */
 export class FlowerEngine {
   private settings: FlowerSettings;
   private garden: Garden;
   private halftone: DiamondHalftone;
+  private pointerInk: PointerInk;
   private seed: number;
   private raf = 0;
   private last = 0;
@@ -93,6 +96,7 @@ export class FlowerEngine {
     this.settings = resolveSettings(options.settings);
     this.garden = new Garden(this.settings);
     this.garden.wind = options.wind ?? 1;
+    this.pointerInk = new PointerInk(this.halftone, this.settings);
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -133,6 +137,7 @@ export class FlowerEngine {
     this.settings = settings;
     this.garden.configure(settings);
     this.garden.wind = options.wind ?? 1;
+    this.pointerInk.settings = settings;
     this.halftone.colors = schemeColors(options.colors, options.scheme);
     this.halftone.accent = oppositeRamp(this.halftone.colors);
     this.setDots(options);
@@ -170,11 +175,14 @@ export class FlowerEngine {
 
   private draw() {
     const { garden, halftone } = this;
-    paintGarden(halftone.beginScene(), garden);
+    const scene = halftone.beginScene();
+    paintGarden(scene, garden);
+    this.pointerInk.paintTrail(scene, garden.time);
+    const marks = this.pointerInk.marks(garden.time);
     const growing = garden.growing;
-    if (growing === null) return halftone.present();
+    if (growing === null) return halftone.present(undefined, marks);
     paintGarden(halftone.beginReveal(), garden, true);
-    halftone.present(spawnScale(garden.spawnPlan!, growing, garden.height));
+    halftone.present(spawnScale(garden.spawnPlan!, growing, garden.height), marks);
   }
 
   private resize(relayout = false) {
@@ -209,6 +217,7 @@ export class FlowerEngine {
     let steps = 0;
     while (this.acc >= STEP && steps < MAX_STEPS) {
       this.garden.step(STEP);
+      this.pointerInk.step(STEP, this.garden.time);
       this.acc -= STEP;
       steps++;
     }
@@ -223,26 +232,34 @@ export class FlowerEngine {
       this.garden.endSpawn();
       this.garden.insects.reset();
       this.garden.petals.reset();
+      this.pointerInk.reset();
       this.draw();
     } else {
       this.schedule();
     }
   };
 
-  /** Moving the pointer through the stems pushes them aside. */
+  /** Moving the pointer through the stems pushes them aside, and leaves a trail. */
   private onPointerMove = (e: PointerEvent) => {
     const rect = this.canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
     // After a pause, or a touch lifting, the pointer may come back anywhere.
-    if (e.timeStamp - this.lastPointer > 150) this.garden.releasePointer();
+    const fresh = e.timeStamp - this.lastPointer > 150;
+    if (fresh) this.garden.releasePointer();
     this.lastPointer = e.timeStamp;
-    this.garden.movePointer(e.clientX - rect.left, e.clientY - rect.top);
+    this.garden.movePointer(x, y);
+    if (!this.reducedMotion.matches) this.pointerInk.move(x, y, fresh);
   };
 
-  /** Clicking or tapping a flower shakes a petal loose. */
+  /** Clicking or tapping splashes a ring of dots, and on a flower shakes a petal loose. */
   private onPointerDown = (e: PointerEvent) => {
     if (!e.isPrimary || e.button !== 0 || this.reducedMotion.matches) return;
     const rect = this.canvas.getBoundingClientRect();
-    this.garden.tap(e.clientX - rect.left, e.clientY - rect.top);
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    this.pointerInk.splash(x, y, this.garden.time);
+    this.garden.tap(x, y);
   };
 }
 

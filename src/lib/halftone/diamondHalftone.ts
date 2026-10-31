@@ -16,6 +16,9 @@
  * A second hidden canvas, the reveal, can be laid out the same way to scale
  * each dot, for animating dots in. What its colours mean is up to the caller.
  *
+ * Marks are dots printed on top, anywhere, in a shade of the accent ramp,
+ * at any size and fading into what's beneath them.
+ *
  * Ink can spread: an SVG filter on the canvas blurs the dots, then cuts their
  * edges back sharp, so dots close together run into each other like wet ink.
  */
@@ -57,6 +60,18 @@ export interface HalftoneRamp {
 
 export interface HalftoneColors extends HalftoneRamp {
   background: string;
+}
+
+/** A dot printed at (x, y) in CSS px over whatever the scene has there, in a shade of the accent ramp. */
+export interface Mark {
+  x: number;
+  y: number;
+  /** Its size, as a share of a full diamond's width, like `sizes`. */
+  size: number;
+  /** Where on the accent ramp it prints, from 0 light to 1 dark. */
+  shade: number;
+  /** How strongly it prints over what's beneath it, from 0 to 1. */
+  opacity: number;
 }
 
 /** `steps` dot sizes, evenly spaced from small to just overlapping their neighbours. */
@@ -202,8 +217,8 @@ export class DiamondHalftone {
     return this.cell * Math.SQRT1_2;
   }
 
-  /** Halftones whatever was drawn since beginScene onto the visible canvas, each dot scaled by `scale` if given. */
-  present(scale?: DotScale) {
+  /** Halftones whatever was drawn since beginScene onto the visible canvas, each dot scaled by `scale` if given, with `marks` printed over it. */
+  present(scale?: DotScale, marks: readonly Mark[] = []) {
     const { ctx, cell, sizes, nu, nv, iu0, iv0 } = this;
     const data = this.sctx.getImageData(0, 0, this.scene.width, this.scene.height).data;
     const mask = scale && this.rctx ? this.rctx.getImageData(0, 0, this.scene.width, this.scene.height).data : null;
@@ -222,6 +237,25 @@ export class DiamondHalftone {
     const curve = clamp(this.curve, 0, 1);
     // Each curved side cuts 2/3 of the triangle under its control point from a plain diamond; the tips reach further to make up for it.
     const tip = 1 / Math.sqrt(1 - (2 * curve) / 3);
+    /** Adds a dot covering as much as a diamond of half-diagonal r at (x, y). */
+    const addDot = (path: Path2D, x: number, y: number, r: number) => {
+      if (dot === "round") {
+        r *= ROUND;
+        path.moveTo(x + r, y);
+        path.arc(x, y, r, 0, TAU);
+      } else if (dot === "square") {
+        r *= SQUARE;
+        path.rect(x - r, y - r, r * 2, r * 2);
+      } else {
+        r *= tip;
+        const c = (r * (1 - curve)) / 2;
+        path.moveTo(x + r, y);
+        path.quadraticCurveTo(x + c, y + c, x, y + r);
+        path.quadraticCurveTo(x - c, y + c, x - r, y);
+        path.quadraticCurveTo(x - c, y - c, x, y - r);
+        path.quadraticCurveTo(x + c, y - c, x + r, y);
+      }
+    };
 
     for (let cj = 0; cj < nv; cj++) {
       const j = iv0 + cj;
@@ -265,29 +299,18 @@ export class DiamondHalftone {
           r *= scale!(mr / n, mg / n, mb / n, x, y, i, j);
           if (r < 0.1) continue;
         }
-        const path = (marked * 2 > ink ? accentPaths : paths)[Math.round(Math.min(1, shade / ink) * last)];
-        if (dot === "round") {
-          r *= ROUND;
-          path.moveTo(x + r, y);
-          path.arc(x, y, r, 0, TAU);
-        } else if (dot === "square") {
-          r *= SQUARE;
-          path.rect(x - r, y - r, r * 2, r * 2);
-        } else {
-          r *= tip;
-          const c = (r * (1 - curve)) / 2;
-          path.moveTo(x + r, y);
-          path.quadraticCurveTo(x + c, y + c, x, y + r);
-          path.quadraticCurveTo(x - c, y + c, x - r, y);
-          path.quadraticCurveTo(x - c, y - c, x, y - r);
-          path.quadraticCurveTo(x + c, y - c, x + r, y);
-        }
+        addDot((marked * 2 > ink ? accentPaths : paths)[Math.round(Math.min(1, shade / ink) * last)], x, y, r);
       }
     }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    // A fading mark is laid over the page rather than the bare canvas, since the ink filter would cut a faint dot away instead of showing it faint.
+    const page = new Path2D();
+    for (const m of marks) if (m.opacity < 1 && m.size > 0) addDot(page, m.x, m.y, half * m.size);
+    ctx.fillStyle = this.colors.background;
+    ctx.fill(page);
     paths.forEach((path, k) => {
       ctx.fillStyle = palette[k];
       ctx.fill(path);
@@ -296,6 +319,15 @@ export class DiamondHalftone {
       ctx.fillStyle = accent[k];
       ctx.fill(path);
     });
+    for (const m of marks) {
+      if (m.opacity <= 0 || m.size <= 0) continue;
+      const path = new Path2D();
+      addDot(path, m.x, m.y, half * m.size);
+      ctx.globalAlpha = Math.min(1, m.opacity);
+      ctx.fillStyle = accent[Math.round(clamp(m.shade, 0, 1) * (accent.length - 1))];
+      ctx.fill(path);
+    }
+    ctx.globalAlpha = 1;
   }
 
   private shadesOf({ light, ink, dark }: HalftoneRamp) {

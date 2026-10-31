@@ -15,7 +15,7 @@ import {
 import { hueOf, withHue } from "../utils/color";
 import { clamp, TAU } from "../utils/math";
 
-const { layout, species, mix, tone, shade, wind, sway, cursor, spawn, insects, petals } = DEFAULT_SETTINGS;
+const { layout, species, mix, tone, shade, wind, sway, cursor, spawn, insects, petals, trail, splash } = DEFAULT_SETTINGS;
 const KINDS = Object.keys(species) as Kind[];
 const LEAVES: LeafShape[] = ["lance", "strap", "oval"];
 
@@ -190,6 +190,29 @@ const CONFIG = {
     sink: slider(petals.sink, 0, 1, 0.01),
     loops: slider(petals.loops, 0, 30, 0.5),
   },
+  trail: {
+    _collapsed: true,
+    enabled: trail.enabled,
+    hold: slider(trail.hold, 0, 3, 0.05),
+    fade: slider(trail.fade, 0.05, 3, 0.05),
+    width: slider(trail.width, 0.5, 6, 0.1),
+    strength: slider(trail.strength, 0, 1, 0.01),
+    strands: slider(trail.strands, 1, 6, 1),
+    spread: slider(trail.spread, 0, 30, 0.5),
+    wave: slider(trail.wave, 20, 400, 5),
+    flow: slider(trail.flow, 0, 12, 0.1),
+    lag: slider(trail.lag, 0, 0.3, 0.005),
+  },
+  splash: {
+    _collapsed: true,
+    enabled: splash.enabled,
+    dots: slider(splash.dots, 1, 24, 1),
+    radius: slider(splash.radius, 0.5, 10, 0.1),
+    duration: slider(splash.duration, 0.1, 2, 0.05),
+    size: slider(splash.size, 0.2, 1.2, 0.02),
+    lightest: slider(splash.shades[0], 0, 1, 0.01),
+    darkest: slider(splash.shades[1], 0, 1, 0.01),
+  },
   layout: {
     _collapsed: true,
     density: slider(1, 0.2, 3, 0.05),
@@ -269,7 +292,7 @@ function toWave(d: ResolvedValues<ReturnType<typeof waveDials>>): WindWave {
 }
 
 function toOptions(v: Values, seed: number): FlowerFieldOptions {
-  const { halftone, colors, shade, layout, tone, wind, sway, cursor, spawn, insects, petals } = v;
+  const { halftone, colors, shade, layout, tone, wind, sway, cursor, spawn, insects, petals, trail, splash } = v;
   return {
     cell: halftone.autoCell ? undefined : halftone.cell,
     steps: halftone.steps,
@@ -339,6 +362,26 @@ function toOptions(v: Values, seed: number): FlowerFieldOptions {
         speed: petals.speed,
         sink: petals.sink,
         loops: petals.loops,
+      },
+      trail: {
+        enabled: trail.enabled,
+        hold: trail.hold,
+        fade: trail.fade,
+        width: trail.width,
+        strength: trail.strength,
+        strands: trail.strands,
+        spread: trail.spread,
+        wave: trail.wave,
+        flow: trail.flow,
+        lag: trail.lag,
+      },
+      splash: {
+        enabled: splash.enabled,
+        dots: splash.dots,
+        radius: splash.radius,
+        duration: splash.duration,
+        size: splash.size,
+        shades: [splash.lightest, splash.darkest],
       },
     },
   };

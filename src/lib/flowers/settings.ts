@@ -1,6 +1,7 @@
 /**
  * Everything about how the bed is laid out, sways, answers the pointer, grows
- * in, is visited by insects and sheds petals, with the values it ships with. FlowerField takes any part of this
+ * in, is visited by insects and sheds petals, and the trail and splash the
+ * pointer leaves on it, with the values it ships with. FlowerField takes any part of this
  * as `settings` and fills in the rest from DEFAULT_SETTINGS.
  */
 import { mergeDeep, type DeepPartial } from "../../utils/merge";
@@ -164,6 +165,43 @@ export interface PetalSettings {
   loops: number;
 }
 
+/**
+ * The trail the pointer leaves behind it as it moves over the field: a few
+ * strands, each printed like the insects' trails, weaving round each other
+ * along a smoothed path behind it. `fade` is the seconds each part takes to
+ * thin out and go once `hold` is up; `width` and `strength` are each strand's.
+ */
+export interface PointerTrailSettings extends TrailSettings {
+  enabled: boolean;
+  /** Seconds each part stays at full strength before it starts to fade. */
+  hold: number;
+  /** How many strands. */
+  strands: number;
+  /** Px each strand strays either side of the path, once they've spread apart. */
+  spread: number;
+  /** Px along the path from one of a strand's crests to the next, give or take. */
+  wave: number;
+  /** Radians a second the waves run along the strands, give or take, some one way and some the other. */
+  flow: number;
+  /** Seconds the trail's head lags behind the pointer; longer rounds its turns off more. */
+  lag: number;
+}
+
+/** A ring of dots in the insects' colours that splashes out round a click or tap, then shrinks and fades. */
+export interface SplashSettings {
+  enabled: boolean;
+  /** How many dots. */
+  dots: number;
+  /** How far they spread, in diamonds. */
+  radius: number;
+  /** Seconds from the click until they've gone. */
+  duration: number;
+  /** Dot size, as a share of a full diamond's width. */
+  size: number;
+  /** The lightest and darkest a dot can print, each picked at random between them, as shares of the insects' colour ramp from light to dark. */
+  shades: [number, number];
+}
+
 export interface FlowerSettings {
   layout: LayoutSettings;
   species: Record<Kind, Species>;
@@ -176,6 +214,8 @@ export interface FlowerSettings {
   spawn: SpawnSettings;
   insects: InsectSettings;
   petals: PetalSettings;
+  trail: PointerTrailSettings;
+  splash: SplashSettings;
 }
 
 /** Any part of FlowerSettings. Arrays and ranges replace the default whole. */
@@ -217,6 +257,8 @@ export const DEFAULT_SETTINGS: FlowerSettings = {
     trail: { fade: 2.5, width: 3.5, strength: 0.9 },
   },
   petals: { enabled: true, size: 1, speed: 1, sink: 0.4, loops: 8 },
+  trail: { enabled: true, hold: 0.4, fade: 0.4, width: 3.5, strength: 0.9, strands: 3, spread: 14, wave: 150, flow: 3, lag: 0.02 },
+  splash: { enabled: true, dots: 8, radius: 3, duration: 0.6, size: 0.7, shades: [0.2, 1] },
 };
 
 export function resolveSettings(input?: FlowerSettingsInput): FlowerSettings {

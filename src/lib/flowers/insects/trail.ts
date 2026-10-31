@@ -40,23 +40,29 @@ export function expire(trail: Trail, now: number, fade: number) {
   if (n) points.splice(0, n);
 }
 
-/**
- * Paints the segment ending at point `i`: as strong and wide as the settings
- * say when new, fading and narrowing as it ages. It's laid over what's below,
- * so a fading trail thins out rather than cutting into the plants it crosses.
- */
+/** Paints the segment ending at point `i`, fading and narrowing as it ages. */
 export function paintSegment(ctx: CanvasRenderingContext2D, trail: Trail, i: number, now: number, settings: TrailSettings, depthShade: number) {
   const a = trail.points[i - 1];
   const b = trail.points[i];
-  const fresh = 1 - (now - b.t) / settings.fade;
+  strokeSegment(ctx, a.x, a.y, b.x, b.y, 1 - (now - b.t) / settings.fade, settings, depthShade * (b.z - 1));
+}
+
+/**
+ * Strokes one piece of a trail from (ax, ay) to (bx, by), `fresh` from 1 new
+ * to 0 gone: as strong and wide as the settings say when new, fainter and
+ * narrower as it fades, and moved `shade` along the ramp. It's laid over
+ * what's below, so a fading trail thins out rather than cutting into the
+ * plants it crosses.
+ */
+export function strokeSegment(ctx: CanvasRenderingContext2D, ax: number, ay: number, bx: number, by: number, fresh: number, settings: TrailSettings, shade = 0) {
   if (fresh <= 0) return;
-  ctx.globalAlpha = settings.strength * fresh;
-  ctx.lineWidth = settings.width * (0.6 + 0.4 * fresh);
+  ctx.globalAlpha = settings.strength * Math.min(1, fresh);
+  ctx.lineWidth = settings.width * (0.6 + 0.4 * Math.min(1, fresh));
   ctx.lineCap = "butt";
-  inAccent(() => inShade(depthShade * (b.z - 1), () => (ctx.strokeStyle = tone(0, 1))));
+  inAccent(() => inShade(shade, () => (ctx.strokeStyle = tone(0, 1))));
   ctx.beginPath();
-  ctx.moveTo(a.x, a.y);
-  ctx.lineTo(b.x, b.y);
+  ctx.moveTo(ax, ay);
+  ctx.lineTo(bx, by);
   ctx.stroke();
   ctx.globalAlpha = 1;
 }
