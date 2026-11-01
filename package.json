@@ -1,6 +1,29 @@
 {
   "name": "halftone-flowers",
   "version": "0.1.0",
+  "description": "Halftone flower field React component built with WebGL2 and TypeScript.",
+  "keywords": [
+    "react",
+    "react-component",
+    "halftone",
+    "flowers",
+    "flower field",
+    "generative",
+    "canvas",
+    "webgl2",
+    "animation",
+    "background",
+    "bees",
+    "butterflies"
+  ],
+  "homepage": "https://lucasjin.ca/flowers",
+  "bugs": {
+    "url": "https://github.com/LucasHJin/halftone-flowers/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LucasHJin/halftone-flowers.git"
+  },
   "license": "MIT",
   "author": "Lucas Jin",
   "type": "module",

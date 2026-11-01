@@ -2,7 +2,7 @@
 
 Fully customizeable halftone flower field with semi-random generation, bees, butterflies, and little easter eggs 🌷
 
-![Flower field](/assets/demo.png)
+![Flower field](https://raw.githubusercontent.com/LucasHJin/halftone-flowers/main/assets/demo.png)
 
 ## Install
 
