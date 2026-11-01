@@ -206,12 +206,12 @@ const CONFIG = {
   splash: {
     _collapsed: true,
     enabled: splash.enabled,
-    dots: slider(splash.dots, 1, 24, 1),
-    radius: slider(splash.radius, 0.5, 10, 0.1),
-    duration: slider(splash.duration, 0.1, 2, 0.05),
-    size: slider(splash.size, 0.2, 1.2, 0.02),
-    lightest: slider(splash.shades[0], 0, 1, 0.01),
-    darkest: slider(splash.shades[1], 0, 1, 0.01),
+    countMin: slider(splash.count[0], 0, 40, 1),
+    countMax: slider(splash.count[1], 0, 40, 1),
+    sizeMin: slider(splash.size[0], 0.1, 2, 0.05),
+    sizeMax: slider(splash.size[1], 0.1, 2, 0.05),
+    reachMin: slider(splash.reach[0], 0, 5, 0.1),
+    reachMax: slider(splash.reach[1], 0, 5, 0.1),
   },
   layout: {
     _collapsed: true,
@@ -377,11 +377,9 @@ function toOptions(v: Values, seed: number): FlowerFieldOptions {
       },
       splash: {
         enabled: splash.enabled,
-        dots: splash.dots,
-        radius: splash.radius,
-        duration: splash.duration,
-        size: splash.size,
-        shades: [splash.lightest, splash.darkest],
+        count: [splash.countMin, splash.countMax],
+        size: [splash.sizeMin, splash.sizeMax],
+        reach: [splash.reachMin, splash.reachMax],
       },
     },
   };

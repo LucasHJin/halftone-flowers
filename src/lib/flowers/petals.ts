@@ -11,12 +11,20 @@
  * Each keeps the depth of the flower it came from, just in front of it, so it
  * passes over plants further back and behind nearer ones, and never changes
  * places with a plant it's over.
+ *
+ * A click that misses the flowers puffs tiny petals out from the spot instead,
+ * copies of petals off a few flowers in the bed, in the colours the insects
+ * and the pointer's trail print in. Each is at its own depth among the plants,
+ * like an insect, so some pass in front of flowers and some behind, the ones
+ * further back a little smaller and lighter. They fly out all round, each
+ * growing in as it goes and swelling a little past its size, slow as the puff
+ * dies down, then drift away like the rest.
  */
 import { clamp, lerp, TAU } from "../../utils/math";
 import type { Garden } from "./garden";
 import { ease, wrap } from "./insects/insect";
 import { looseLook, petalAt, petalIndices, type LoosePaint } from "./paint/loose";
-import { inLight, inShade, lightStrength, plantShade } from "./paint/tone";
+import { inAccent, inLight, inShade, lightStrength, plantShade } from "./paint/tone";
 import type { Plant, Stem } from "./types";
 
 /** The most loose at once; past this, a click still nods the flower but shakes no more off. */
@@ -37,6 +45,18 @@ const CALM = 3;
 /** Seconds a petal takes to grow from its size on the flower to its size loose. */
 const GROW = 0.45;
 
+/** Seconds a puff's outward rush takes to die down to about a third. */
+const PUFF = 0.22;
+
+/** How many flowers in the bed a puff's petals copy. */
+const SOURCES = 3;
+
+/** How far past its size a puff's petal swells as it grows in, as a back-ease's overshoot: about an eighth. */
+const SWELL = 2;
+
+/** Its size as a puff's petal sets out, as a share of its size loose. */
+const SEED = 0.2;
+
 /** A petal about to come off: the flower it's on, which of its petals it is, and when, in garden seconds. */
 interface Coming {
   plant: Plant;
@@ -48,9 +68,9 @@ interface Coming {
 interface LoosePetal {
   x: number;
   y: number;
-  /** Depth among the plants: its flower's, just in front of it. */
+  /** Depth among the plants: its flower's, just in front of it, or a puff's petal's own. */
   z: number;
-  /** The plant it came from, whose shade it prints in. */
+  /** The plant it came from, whose shade it prints in unless it's a puff's. */
   plant: Plant;
   /** Which way it drifts: -1 left, 1 right. */
   side: number;
@@ -80,6 +100,27 @@ interface LoosePetal {
   length: number;
   /** Its size as it came off, as a share of its size loose. */
   from: number;
+  /** How far past its size it swells as it grows in, as a back-ease's overshoot; 0 for none. */
+  swell: number;
+  /** Px a second it's still rushing out from a puff, dying down. */
+  kick: [number, number];
+  /** Prints in the accent ramp, the pointer trail's colours, as a puff's petals do. */
+  accent: boolean;
+}
+
+/** How a petal drifts once loose, its own pace, wandering, loops and tumbling, from still. */
+function drifting(bloom: number, sink: number) {
+  return {
+    speed: 0,
+    cruise: bloom * lerp(1.8, 3, Math.random()),
+    aim: Math.random() < sink ? lerp(0.7, 1.1, Math.random()) : lerp(0.02, 0.3, Math.random()),
+    age: 0,
+    wander: [Math.random() * TAU, Math.random() * TAU, TAU * lerp(0.15, 0.35, Math.random())] as [number, number, number],
+    loop: null,
+    calm: lerp(0.8, 2, Math.random()),
+    spinRate: (Math.random() < 0.5 ? -1 : 1) * lerp(0.4, 1.6, Math.random()),
+    flipRate: (Math.random() < 0.5 ? -1 : 1) * lerp(1, 2.5, Math.random()),
+  };
 }
 
 export class Petals {
@@ -117,33 +158,70 @@ export class Petals {
     // Mostly off to the side it was on, setting out the way it pointed and lifting, from still.
     const side = Math.cos(at.a) + lerp(-0.6, 0.6, Math.random()) >= 0 ? 1 : -1;
     this.list.push({
+      ...drifting(bloom, sink),
       x: at.x,
       y: at.y,
       z: plant.depth + ON_TOP,
       plant,
       side,
       heading: Math.atan2(Math.sin(at.a) - 0.8, Math.cos(at.a)),
-      speed: 0,
-      cruise: bloom * lerp(1.8, 3, Math.random()),
-      aim: Math.random() < sink ? lerp(0.7, 1.1, Math.random()) : lerp(0.02, 0.3, Math.random()),
-      age: 0,
-      wander: [Math.random() * TAU, Math.random() * TAU, TAU * lerp(0.15, 0.35, Math.random())],
-      loop: null,
-      calm: lerp(0.8, 2, Math.random()),
       // Lying as it lay on the flower, facing you.
       spin: at.a,
-      spinRate: (Math.random() < 0.5 ? -1 : 1) * lerp(0.4, 1.6, Math.random()),
       flip: 0,
-      flipRate: (Math.random() < 0.5 ? -1 : 1) * lerp(1, 2.5, Math.random()),
       paint: look.paint,
       length: look.length,
       from: Math.min(1, 1 / look.scale),
+      swell: 0,
+      kick: [0, 0],
+      accent: false,
     });
+  }
+
+  /** Tiny petals puff out all round (x, y), copies of petals off a few flowers in the bed. */
+  puff(x: number, y: number) {
+    const { cell, settings, bloom, plants } = this.garden;
+    const { count, size, reach } = settings.splash;
+    const { sink } = settings.petals;
+    const heads = plants.flatMap((plant) => plant.stems.filter((s) => s.head && petalIndices(s, s.head).length).map((stem) => ({ plant, stem })));
+    if (!heads.length) return;
+    const from = Array.from({ length: SOURCES }, () => heads[Math.floor(Math.random() * heads.length)]);
+    const n = Math.min(Math.round(lerp(count[0] - 0.49, count[1] + 0.49, Math.random())), MOST - this.list.length - this.coming.length);
+    const start = Math.random() * TAU;
+    for (let i = 0; i < n; i++) {
+      const { plant, stem: s } = from[Math.floor(Math.random() * from.length)];
+      const h = s.head!;
+      const all = petalIndices(s, h);
+      const k = all[Math.floor(Math.random() * all.length)];
+      // The same few dots long off a lily as off a daisy, a little smaller further back: a loose petal's length goes with the size it's asked for.
+      const z = Math.random();
+      const look = looseLook(s, h, k, cell, (lerp(size[0], size[1], Math.random()) * lerp(0.85, 1.1, z) * bloom) / looseLook(s, h, k, cell, 1).length);
+      // Evenly round, each nudged off its share, flying its own way out.
+      const a = start + (TAU * (i + lerp(-0.35, 0.35, Math.random()))) / n;
+      const rush = (lerp(reach[0], reach[1], Math.random()) * bloom) / PUFF;
+      this.list.push({
+        ...drifting(bloom, sink),
+        x,
+        y,
+        z,
+        plant,
+        side: Math.cos(a) + lerp(-0.6, 0.6, Math.random()) >= 0 ? 1 : -1,
+        heading: a,
+        spin: Math.random() * TAU,
+        flip: Math.random() * TAU,
+        paint: look.paint,
+        length: look.length,
+        from: SEED,
+        swell: SWELL,
+        kick: [Math.cos(a) * rush, Math.sin(a) * rush],
+        accent: true,
+      });
+    }
   }
 
   step(dt: number) {
     const garden = this.garden;
     const { speed, loops } = garden.settings.petals;
+    const calming = Math.exp(-dt / PUFF);
     this.coming = this.coming.filter((c) => {
       if (c.at > garden.time) return true;
       this.loosen(c);
@@ -175,11 +253,13 @@ export class Petals {
         p.loop = { at: 0, length: lerp(1.8, 2.8, Math.random()), way: over ? -p.side : p.side };
       }
       p.heading = wrap(p.heading + turn * dt);
-      p.x += Math.cos(p.heading) * p.speed * dt;
-      p.y += Math.sin(p.heading) * p.speed * dt;
-      // Turns with its path, and rolls quicker the faster it goes.
+      p.x += (Math.cos(p.heading) * p.speed + p.kick[0]) * dt;
+      p.y += (Math.sin(p.heading) * p.speed + p.kick[1]) * dt;
+      // Turns with its path, and rolls quicker the faster it goes, tumbling as it rushes out of a puff.
       p.spin += (p.spinRate + 0.7 * turn) * dt;
-      p.flip += p.flipRate * (0.4 + (0.6 * p.speed) / p.cruise) * dt;
+      p.flip += p.flipRate * (0.4 + (0.6 * (p.speed + Math.hypot(p.kick[0], p.kick[1]))) / p.cruise) * dt;
+      p.kick[0] *= calming;
+      p.kick[1] *= calming;
     }
     const { width: W, height: H } = garden;
     this.list = this.list.filter((p) => p.x > -p.length && p.x < W + p.length && p.y < H + p.length && p.y > -H);
@@ -203,13 +283,18 @@ export class Petals {
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(p.spin);
-    // Coming off, it grows quickly at first, then settles into its loose size and shading.
-    const off = 1 - (1 - Math.min(p.age / GROW, 1)) ** 3;
-    const grown = lerp(p.from, 1, off);
+    // Coming off, it grows quickly at first, then settles into its loose size and shading, a puff's swelling past it on the way.
+    const t = Math.min(p.age / GROW, 1) - 1;
+    const off = 1 + t ** 3;
+    const grown = lerp(p.from, 1, off + p.swell * t * t * (1 + t));
     // Rolling about its length it narrows and opens out again, but never past half its width, so its shape still shows.
     ctx.scale(grown, grown * Math.max(Math.abs(face), 0.55));
-    // Its inner face prints lighter than its back.
-    inShade(plantShade(p.plant, this.garden.settings.shade), () => inLight(() => p.paint(ctx, -lightStrength() * face * off)));
+    // Its inner face prints lighter than its back. A puff's petal prints lighter the further back it is, as an insect does; the rest in their flower's shade.
+    const { shade } = this.garden.settings;
+    const by = p.accent ? shade.depth * (p.z - 1) : plantShade(p.plant, shade);
+    const paint = () => inShade(by, () => inLight(() => p.paint(ctx, -lightStrength() * face * off)));
+    if (p.accent) inAccent(paint);
+    else paint();
     ctx.restore();
   }
 }

@@ -1,16 +1,12 @@
 /**
- * What the pointer leaves on the field in the insects' colours: a trail and,
- * round a click, a small ring of dots splashing out, each its own shade at
- * random. The trail is a few strands, each printed like a bee's or
- * butterfly's trail, that ease after the pointer along one smoothed path.
- * Close behind it they run together; further back they spread apart and weave
- * round each other in waves that keep running along them, like wisps of wind,
- * each strand fading in and out along its length. They stay a moment, then
- * thin and fade from the old end. The trail is painted in front of
- * everything; the splash is printed over the halftone.
+ * The trail the pointer leaves on the field: a few strands, each printed like
+ * a bee's or butterfly's trail, that ease after the pointer along one smoothed
+ * path. Close behind it they run together; further back they spread apart and
+ * weave round each other in waves that keep running along them, like wisps of
+ * wind, each strand fading in and out along its length. They stay a moment,
+ * then thin and fade from the old end. It's painted in front of everything.
  */
 import { clamp, lerp, TAU } from "../../utils/math";
-import type { DiamondHalftone, Mark } from "../halftone";
 import { smoothstep } from "./insects/insect";
 import { strokeSegment } from "./insects/trail";
 import type { FlowerSettings } from "./settings";
@@ -26,15 +22,6 @@ const OPEN = 0.15;
 
 /** Px along the trail over which each strand fades out and back in, roughly. */
 const WISP = 520;
-
-/** Seconds a splash dot takes to pop up, past its size and back. */
-const POP = 0.2;
-
-/** How far out a splash's dots start, as a share of how far they go. */
-const START = 0.3;
-
-/** Share of a splash's time its dots spend shrinking and fading at the end. */
-const SPLASH_FADE = 0.45;
 
 /** A spot the trail's head passed. */
 interface PathPoint {
@@ -68,26 +55,14 @@ interface PointerTrail {
   strands: Strand[];
 }
 
-interface Splash {
-  x: number;
-  y: number;
-  born: number;
-  /** Which way each dot goes, radians, how far as a share of the radius, and its shade. */
-  dots: { angle: number; reach: number; shade: number }[];
-}
-
 export class PointerInk {
   private trails: PointerTrail[] = [];
   /** The trail being laid now, the head laying it, and where the pointer is. */
   private current: PointerTrail | null = null;
   private head = { x: 0, y: 0, vx: 0, vy: 0, nx: 0, ny: -1 };
   private target = { x: 0, y: 0 };
-  private splashes: Splash[] = [];
 
-  constructor(
-    private lattice: Pick<DiamondHalftone, "cell">,
-    public settings: FlowerSettings,
-  ) {}
+  constructor(public settings: FlowerSettings) {}
 
   /** The pointer moved to (x, y). `fresh` starts a new trail there, for a pointer that may have come back anywhere. */
   move(x: number, y: number, fresh: boolean) {
@@ -181,60 +156,9 @@ export class PointerInk {
     }));
   }
 
-  /** A click or tap at (x, y): a ring of dots splashes out round it. */
-  splash(x: number, y: number, now: number) {
-    const { enabled, dots, shades } = this.settings.splash;
-    if (!enabled) return;
-    const n = Math.max(1, Math.round(dots));
-    const turn = Math.random() * TAU;
-    this.splashes.push({
-      x,
-      y,
-      born: now,
-      dots: Array.from({ length: n }, (_, k) => ({
-        angle: turn + ((k + lerp(-0.2, 0.2, Math.random())) * TAU) / n,
-        reach: lerp(0.8, 1.15, Math.random()),
-        shade: lerp(shades[0], shades[1], Math.random()),
-      })),
-    });
-  }
-
-  /** The splash's dots showing at `now`, forgetting those that have gone. */
-  marks(now: number) {
-    const out: Mark[] = [];
-    const { radius, duration, size } = this.settings.splash;
-    const reach = radius * this.lattice.cell;
-    this.splashes = this.splashes.filter((s) => now - s.born < duration);
-    for (const s of this.splashes) {
-      const age = now - s.born;
-      const t = age / duration;
-      const far = lerp(START, 1, 1 - (1 - t) ** 3) * reach;
-      // Pops up from four fifths of its size to a little past it, then settles.
-      const k = age / POP;
-      let grown = k < 0.6 ? lerp(0.8, 1.1, 1 - (1 - k / 0.6) ** 2) : lerp(1.1, 1, smoothstep(0.6, 1, k));
-      let opacity = Math.min(1, k / 0.5);
-      const going = (t - (1 - SPLASH_FADE)) / SPLASH_FADE;
-      if (going > 0) {
-        grown *= 1 - smoothstep(0, 1, going);
-        opacity *= 1 - going;
-      }
-      for (const d of s.dots) {
-        out.push({
-          x: s.x + Math.cos(d.angle) * far * d.reach,
-          y: s.y + Math.sin(d.angle) * far * d.reach,
-          size: size * grown,
-          shade: d.shade,
-          opacity,
-        });
-      }
-    }
-    return out;
-  }
-
-  /** Clears the trail and any splash. */
+  /** Clears the trail. */
   reset() {
     this.trails = [];
     this.current = null;
-    this.splashes = [];
   }
 }

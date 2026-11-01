@@ -240,10 +240,11 @@ export class Garden {
    * A click or tap at (x, y). The flower it's on nods as if brushed and shakes
    * a petal loose: the one that shows there, or failing that, where
    * another plant's stem or leaf crosses it, the one it's furthest inside or
-   * closest to, within half the pointer's reach.
+   * closest to, within half the pointer's reach. Anywhere else, tiny petals
+   * puff out from it.
    */
   tap(x: number, y: number) {
-    if (!this.settings.petals.enabled || this.growing !== null) return;
+    if (this.growing !== null) return;
     this.cover.paint(this);
     let hit: [Plant, Stem] | null = null;
     let best = this.hand * 0.5;
@@ -258,7 +259,11 @@ export class Garden {
         }
       }
     }
-    if (!hit) return;
+    if (!hit) {
+      if (this.settings.splash.enabled) this.petals.puff(x, y);
+      return;
+    }
+    if (!this.settings.petals.enabled) return;
     const [plant, s] = hit;
     const { strength, limit } = this.settings.cursor;
     s.gust = limit * Math.tanh((s.gust + strength * this.catches(s) * TAP) / limit);

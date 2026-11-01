@@ -67,9 +67,9 @@ export interface FlowerFieldOptions {
 /**
  * Grows a garden on a canvas and keeps it swaying: fixed-timestep loop,
  * growing in on first show, re-layout on resize, pointer brushing, a trail
- * behind the pointer, petals shaken loose and a splash of dots by a click,
+ * behind the pointer, petals shaken loose or puffed out by a click,
  * insects visiting, pausing off-screen, and a still frame without insects,
- * petals or the pointer's trail and splash for prefers-reduced-motion. `update` takes new options without growing in again.
+ * petals or the pointer's trail for prefers-reduced-motion. `update` takes new options without growing in again.
  */
 export class FlowerEngine {
   private settings: FlowerSettings;
@@ -96,7 +96,7 @@ export class FlowerEngine {
     this.settings = resolveSettings(options.settings);
     this.garden = new Garden(this.settings);
     this.garden.wind = options.wind ?? 1;
-    this.pointerInk = new PointerInk(this.halftone, this.settings);
+    this.pointerInk = new PointerInk(this.settings);
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -178,11 +178,10 @@ export class FlowerEngine {
     const scene = halftone.beginScene();
     paintGarden(scene, garden);
     this.pointerInk.paintTrail(scene, garden.time);
-    const marks = this.pointerInk.marks(garden.time);
     const growing = garden.growing;
-    if (growing === null) return halftone.present(undefined, marks);
+    if (growing === null) return halftone.present();
     paintGarden(halftone.beginReveal(), garden, true);
-    halftone.present(spawnScale(garden.spawnPlan!, growing, garden.height), marks);
+    halftone.present(spawnScale(garden.spawnPlan!, growing, garden.height));
   }
 
   private resize(relayout = false) {
@@ -252,14 +251,11 @@ export class FlowerEngine {
     if (!this.reducedMotion.matches) this.pointerInk.move(x, y, fresh);
   };
 
-  /** Clicking or tapping splashes a ring of dots, and on a flower shakes a petal loose. */
+  /** Clicking or tapping a flower shakes a petal loose; anywhere else, tiny petals puff out from the spot. */
   private onPointerDown = (e: PointerEvent) => {
     if (!e.isPrimary || e.button !== 0 || this.reducedMotion.matches) return;
     const rect = this.canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    this.pointerInk.splash(x, y, this.garden.time);
-    this.garden.tap(x, y);
+    this.garden.tap(e.clientX - rect.left, e.clientY - rect.top);
   };
 }
 

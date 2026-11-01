@@ -187,19 +187,21 @@ export interface PointerTrailSettings extends TrailSettings {
   lag: number;
 }
 
-/** A ring of dots in the insects' colours that splashes out round a click or tap, then shrinks and fades. */
+/**
+ * Tiny petals that puff out from a click or tap that misses the flowers, as if
+ * a flower burst there, copies of petals off a few flowers in the bed printed
+ * in the pointer trail's colours. Once
+ * the puff dies down they drift away like petals shaken off a flower, with the
+ * same speed, sink and loops.
+ */
 export interface SplashSettings {
   enabled: boolean;
-  /** How many dots. */
-  dots: number;
-  /** How far they spread, in diamonds. */
-  radius: number;
-  /** Seconds from the click until they've gone. */
-  duration: number;
-  /** Dot size, as a share of a full diamond's width. */
-  size: number;
-  /** The lightest and darkest a dot can print, each picked at random between them, as shares of the insects' colour ramp from light to dark. */
-  shades: [number, number];
+  /** Fewest and most petals a click puffs out. */
+  count: [number, number];
+  /** Shortest and longest, in base flower sizes, whatever flower they copy. */
+  size: [number, number];
+  /** Least and most each flies out before the wind takes it, in base flower sizes. */
+  reach: [number, number];
 }
 
 export interface FlowerSettings {
@@ -258,7 +260,7 @@ export const DEFAULT_SETTINGS: FlowerSettings = {
   },
   petals: { enabled: true, size: 1, speed: 1, sink: 0.4, loops: 8 },
   trail: { enabled: true, hold: 0.4, fade: 0.4, width: 3.5, strength: 0.9, strands: 3, spread: 14, wave: 150, flow: 3, lag: 0.02 },
-  splash: { enabled: true, dots: 8, radius: 3, duration: 0.6, size: 0.7, shades: [0.2, 1] },
+  splash: { enabled: true, count: [8, 14], size: [0.55, 0.9], reach: [0.8, 2] },
 };
 
 export function resolveSettings(input?: FlowerSettingsInput): FlowerSettings {

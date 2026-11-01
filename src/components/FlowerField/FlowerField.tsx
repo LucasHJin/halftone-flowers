@@ -13,7 +13,7 @@ export interface FlowerFieldProps extends FlowerFieldOptions {
   ref?: Ref<FlowerFieldHandle>;
 }
 
-/** Procedurally grown flowers swaying in the wind, with butterflies and bees visiting, drawn as a halftone of round dots. The pointer leaves a trail like the insects', a click splashes a ring of dots, and clicking a flower shakes its petals off, until it has none left. Fills its parent. */
+/** Procedurally grown flowers swaying in the wind, with butterflies and bees visiting, drawn as a halftone of round dots. The pointer leaves a trail like the insects', a click elsewhere puffs out tiny petals that drift off on the wind, and clicking a flower shakes its petals off, until it has none left. Fills its parent. */
 export function FlowerField({ className, ref, ...options }: FlowerFieldProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useFlowerField(canvasRef, options);
