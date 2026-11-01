@@ -110,6 +110,13 @@ export class PointerInk {
     }
   }
 
+  /** The head and its speed, px/s, or null while no trail is being laid. */
+  get motion() {
+    if (!this.current || !this.settings.trail.enabled) return null;
+    const { x, y, vx, vy } = this.head;
+    return { x, y, speed: Math.hypot(vx, vy) };
+  }
+
   paintTrail(ctx: CanvasRenderingContext2D, now: number) {
     const trail = this.settings.trail;
     if (!trail.enabled) return;

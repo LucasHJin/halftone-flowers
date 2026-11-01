@@ -110,6 +110,10 @@ const CONFIG = {
     dark: DEFAULT_COLORS.dark,
     randomize: { type: "action", label: "Random colours" },
   },
+  sound: {
+    enabled: true,
+    volume: slider(0.6, 0, 1, 0.01),
+  },
   shade: {
     _collapsed: true,
     shades: slider(15, 1, 25, 2),
@@ -442,5 +446,5 @@ export function useFlowerDials(field: RefObject<FlowerFieldHandle | null>) {
       if (action === "growAgain" || action === "newBed") setGeneration((g) => g + 1);
     },
   });
-  return { options: toOptions(dials.values, seed), generation };
+  return { options: toOptions(dials.values, seed), generation, sound: dials.values.sound };
 }

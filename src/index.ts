@@ -1,9 +1,15 @@
 export { FlowerField, type FlowerFieldHandle, type FlowerFieldProps } from "./FlowerField.js";
+export { useFieldEvents, type FieldEventHandlers } from "./useFieldEvents.js";
 export {
   DEFAULT_COLORS,
   DEFAULT_SETTINGS,
   schemeColors,
   type CursorSettings,
+  type FieldEvent,
+  type FieldEvents,
+  type FieldEventType,
+  type FieldListener,
+  type FieldPoint,
   type FlowerFieldOptions,
   type FlowerSettings,
   type FlowerSettingsInput,

@@ -193,12 +193,14 @@ export class Petals {
   /**
    * Queues the petal left on `s`'s head nearest the click at (x, y), or one
    * about as near, to come off a moment into the nod. None if even the nearest
-   * is past `REACH`, as on a bare stretch of spike.
+   * is past `REACH`, as on a bare stretch of spike. Returns how many it has
+   * left after that one, or null if none comes off.
    */
   shed(plant: Plant, s: Stem, x: number, y: number) {
     const h = s.head!;
     let left = petalIndices(s, h).filter((k) => !h.lost.has(k) && !this.coming.some((c) => c.stem === s && c.k === k));
-    if (!left.length || this.list.length + this.coming.length >= MOST) return;
+    if (!left.length || this.list.length + this.coming.length >= MOST) return null;
+    const remaining = left.length - 1;
     // A peony's outer petals go first.
     if (h.kind === "peony") left = left.slice(0, 3);
     const away = left.map((k) => {
@@ -206,10 +208,11 @@ export class Petals {
       return Math.hypot(at.x - x, at.y - y);
     });
     const nearest = Math.min(...away);
-    if (nearest > h.radius * REACH) return;
+    if (nearest > h.radius * REACH) return null;
     const near = left.filter((_, i) => away[i] <= nearest + h.radius * NEAR);
     const k = near[Math.floor(Math.random() * near.length)];
     this.coming.push({ plant, stem: s, k, at: this.garden.time + lerp(0.05, 0.15, Math.random()), tap: [x, y] });
+    return remaining;
   }
 
   /** Takes petal `k` off its head, starting loose where it was, at its angle and size there. */
@@ -252,13 +255,13 @@ export class Petals {
     });
   }
 
-  /** Tiny copies of petals off up to `SOURCES` random flowers burst out all round (x, y). */
+  /** Tiny copies of petals off up to `SOURCES` random flowers burst out all round (x, y). Returns how many. */
   puff(x: number, y: number) {
     const { cell, settings, bloom, plants } = this.garden;
     const { count, size, reach } = settings.splash;
     const { sink } = settings.petals;
     const heads = plants.flatMap((plant) => plant.stems.filter((s) => s.head && petalIndices(s, s.head).length).map((stem) => ({ plant, stem })));
-    if (!heads.length) return;
+    if (!heads.length) return 0;
     const from = Array.from({ length: SOURCES }, () => heads[Math.floor(Math.random() * heads.length)]);
     const n = Math.min(Math.round(lerp(count[0] - 0.49, count[1] + 0.49, Math.random())), MOST - this.list.length - this.coming.length);
     const start = Math.random() * TAU;
@@ -294,6 +297,7 @@ export class Petals {
         turn: { x: 0, y: 0, shares: [], wait: 0, takes: 0 },
       });
     }
+    return Math.max(0, n);
   }
 
   step(dt: number) {

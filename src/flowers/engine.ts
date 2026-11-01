@@ -1,6 +1,7 @@
 import { lightnessOf, opposite, withLightness } from "../utils/color.js";
 import { clamp } from "../utils/math.js";
 import { DiamondHalftone, evenSizes, type DotShape, type Grid, type HalftoneColors } from "../halftone/index.js";
+import { FieldEmitter } from "./events.js";
 import { Garden } from "./garden.js";
 import type { InsectKind } from "./insects/index.js";
 import { paintGarden } from "./paint/index.js";
@@ -10,6 +11,9 @@ import { spawnScale } from "./spawn.js";
 
 const STEP = 1 / 60;
 const MAX_STEPS = 4;
+
+/** Px/s below which the trail's head counts as stopped. */
+const STILL = 2;
 
 /** A field whose shorter side is under this many CSS px counts as a phone (Android's 600dp breakpoint). */
 const PHONE = 600;
@@ -68,7 +72,8 @@ export interface FlowerFieldOptions {
 
 /**
  * Runs a garden on a canvas on a fixed-timestep loop, paused off-screen. With prefers-reduced-motion
- * it draws still frames, without insects, loose petals or the pointer trail.
+ * it draws still frames, without insects, loose petals or the pointer trail. Reports clicks and the
+ * trail through `events`.
  */
 export class FlowerEngine {
   private settings: FlowerSettings;
@@ -85,11 +90,17 @@ export class FlowerEngine {
   private disposed = false;
   private laidOut = "";
   private lastPointer = 0;
+  /** Where the last `trail` event put the head, or null once one at speed 0 has gone out. */
+  private trailAt: { x: number; y: number } | null = null;
   private reducedMotion: MediaQueryList;
   private resizeObserver: ResizeObserver;
   private intersectionObserver: IntersectionObserver;
 
-  constructor(private canvas: HTMLCanvasElement, private options: FlowerFieldOptions = {}) {
+  constructor(
+    private canvas: HTMLCanvasElement,
+    private options: FlowerFieldOptions = {},
+    private events = new FieldEmitter(),
+  ) {
     this.seed = options.seed ?? (Math.random() * 2 ** 32) >>> 0;
     this.halftone = new DiamondHalftone(canvas, schemeColors(options.colors, options.scheme));
     this.halftone.accent = oppositeRamp(this.halftone.colors);
@@ -153,6 +164,7 @@ export class FlowerEngine {
 
   destroy() {
     this.disposed = true;
+    this.stopTrail();
     this.halftone.destroy();
     cancelAnimationFrame(this.raf);
     this.resizeObserver.disconnect();
@@ -205,7 +217,10 @@ export class FlowerEngine {
 
   private schedule() {
     cancelAnimationFrame(this.raf);
-    if (this.disposed || !this.visible || this.reducedMotion.matches) return;
+    if (this.disposed || !this.visible || this.reducedMotion.matches) {
+      this.stopTrail();
+      return;
+    }
     this.last = performance.now();
     this.raf = requestAnimationFrame(this.frame);
   }
@@ -227,12 +242,29 @@ export class FlowerEngine {
       this.stale = false;
       this.draw();
     }
+    if (steps) this.emitTrail();
     this.raf = requestAnimationFrame(this.frame);
   };
+
+  private emitTrail() {
+    if (!this.events.has("trail")) return;
+    const head = this.pointerInk.motion;
+    if (!head || head.speed < STILL) return this.stopTrail();
+    this.trailAt = head;
+    this.events.emit({ type: "trail", ...head, width: this.garden.width, height: this.garden.height });
+  }
+
+  private stopTrail() {
+    if (!this.trailAt) return;
+    const { x, y } = this.trailAt;
+    this.trailAt = null;
+    this.events.emit({ type: "trail", x, y, speed: 0, width: this.garden.width, height: this.garden.height });
+  }
 
   private onMotionPreference = () => {
     if (this.reducedMotion.matches) {
       cancelAnimationFrame(this.raf);
+      this.stopTrail();
       this.garden.endSpawn();
       this.garden.insects.reset();
       this.garden.petals.reset();
@@ -258,7 +290,10 @@ export class FlowerEngine {
   private onPointerDown = (e: PointerEvent) => {
     if (!e.isPrimary || e.button !== 0 || this.reducedMotion.matches) return;
     const rect = this.canvas.getBoundingClientRect();
-    this.garden.tap(e.clientX - rect.left, e.clientY - rect.top);
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const tapped = this.garden.tap(x, y);
+    if (tapped) this.events.emit({ ...tapped, x, y, width: this.garden.width, height: this.garden.height });
   };
 }
 

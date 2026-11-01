@@ -2,12 +2,14 @@ import { useEffect, useRef } from "react";
 import { DialRoot } from "dialkit";
 import "dialkit/styles.css";
 import { FlowerField, schemeColors, type FlowerFieldHandle } from "halftone-flowers";
+import { useFieldSound } from "./sound";
 import { useFlowerDials } from "./useFlowerDials";
 import styles from "./App.module.css";
 
 export function App() {
   const field = useRef<FlowerFieldHandle>(null);
-  const { options, generation } = useFlowerDials(field);
+  const { options, generation, sound } = useFlowerDials(field);
+  useFieldSound(field, sound);
   const scheme = options.scheme ?? "light";
   const page = schemeColors(options.colors, scheme).background;
 

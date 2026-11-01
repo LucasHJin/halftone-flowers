@@ -4,6 +4,7 @@
  * spring driven by the wind plus the pointer's breeze.
  */
 import { clamp, createRandom, lerp, TAU } from "../utils/math.js";
+import type { Tapped } from "./events.js";
 import type { FlowerSettings, Mix } from "./settings.js";
 import { Insects } from "./insects/index.js";
 import { Cover } from "./insects/cover.js";
@@ -234,13 +235,13 @@ export class Garden {
    * A click or tap at (x, y). An insect there that no nearer plant hides sends
    * up a heart. Otherwise the head showing there, else the one it's furthest
    * inside or nearest within `hand / 2`, nods and sheds a petal. Anywhere else,
-   * tiny petals puff out.
+   * tiny petals puff out. Returns what happened, or null if nothing did.
    */
-  tap(x: number, y: number) {
-    if (this.growing !== null) return;
+  tap(x: number, y: number): Tapped | null {
+    if (this.growing !== null) return null;
     this.cover.paint(this);
     const insect = this.settings.insects.heart.enabled ? this.insects.at(x, y, this.cover) : null;
-    if (insect) return this.insects.love(insect);
+    if (insect) return this.insects.love(insect) ? { type: "heart", insect: insect.kind } : null;
     let hit: [Plant, Stem] | null = null;
     let best = this.hand * 0.5;
     for (const plant of this.plants) {
@@ -255,14 +256,16 @@ export class Garden {
       }
     }
     if (!hit) {
-      if (this.settings.splash.enabled) this.petals.puff(x, y);
-      return;
+      const count = this.settings.splash.enabled ? this.petals.puff(x, y) : 0;
+      return count ? { type: "puff", count } : null;
     }
-    if (!this.settings.petals.enabled) return;
+    if (!this.settings.petals.enabled) return null;
     const [plant, s] = hit;
     const { strength, limit } = this.settings.cursor;
     s.gust = limit * Math.tanh((s.gust + strength * this.catches(s) * TAP) / limit);
-    this.petals.shed(plant, s, x, y);
+    const left = this.petals.shed(plant, s, x, y);
+    const kind = s.head!.kind;
+    return left === null ? { type: "nod", kind } : { type: "shed", kind, left };
   }
 
   /** The pointer moved to (x, y). Stems it passes through lean its way, then drift back. */

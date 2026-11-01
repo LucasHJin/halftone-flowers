@@ -157,10 +157,12 @@ export class Insects {
     return hit;
   }
 
-  /** Sends a heart up out of `b`. */
+  /** Sends a heart up out of `b`. False if `HEARTS` are already up. */
   love(b: Insect) {
     const { bloom, settings, time } = this.garden;
-    if (this.hearts.length < HEARTS) this.hearts.push(sendHeart(b, bloom, settings.insects.heart, time));
+    if (this.hearts.length >= HEARTS) return false;
+    this.hearts.push(sendHeart(b, bloom, settings.insects.heart, time));
+    return true;
   }
 
   step(dt: number) {

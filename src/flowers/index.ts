@@ -1,4 +1,5 @@
 export { DEFAULT_COLORS, FlowerEngine, schemeColors, type FlowerFieldOptions, type Scheme } from "./engine.js";
+export { FieldEmitter, type FieldEvent, type FieldEvents, type FieldEventType, type FieldListener, type FieldPoint } from "./events.js";
 export {
   DEFAULT_SETTINGS,
   type CursorSettings,
