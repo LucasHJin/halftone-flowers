@@ -1,5 +1,9 @@
 # halftone-flowers
 
+Fully customizeable halftone flower field with semi-random generation, bees, butterflies, and little easter eggs 🌷
+
+![Flower field](/assets/demo.png)
+
 ## Install
 
 ```sh

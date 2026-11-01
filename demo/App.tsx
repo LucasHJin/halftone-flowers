@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DialRoot } from "dialkit";
 import "dialkit/styles.css";
 import { FlowerField, schemeColors, type FlowerFieldHandle } from "halftone-flowers";
@@ -20,12 +20,23 @@ export function App() {
     root.style.colorScheme = scheme;
   }, [page, scheme]);
 
+  // H hides and shows the panel, for screenshots.
+  const [panel, setPanel] = useState(true);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const typing = e.target instanceof HTMLElement && (e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName));
+      if (e.key.toLowerCase() === "h" && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) setPanel((p) => !p);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <>
       <main className={styles.hero}>
         <FlowerField key={generation} ref={field} {...options} />
       </main>
-      <DialRoot theme={scheme} />
+      {panel && <DialRoot theme={scheme} />}
     </>
   );
 }
