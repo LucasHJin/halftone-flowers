@@ -10,8 +10,10 @@
  * space, where every cell of the lattice is a square of SS × SS pixels. Each
  * cell then averages its pixels into one tone, picks one of a few dot sizes
  * (an ordered dither chooses between the two nearest sizes), and takes the
- * nearest of a few shades. Where blue marks most of a diamond's ink, it takes
- * a shade of a second ramp, `accent`, instead.
+ * nearest of a few shades. Where blue marks a diamond's ink, it takes a shade
+ * of a second ramp, `accent`, instead; where it marks only part of it, the
+ * ordered dither picks which, so a part-marked stretch prints a mix of the two
+ * ramps' dots in proportion.
  *
  * A second hidden canvas, the reveal, can be laid out the same way to scale
  * each dot, for animating dots in. What its colours mean is up to the caller.
@@ -265,7 +267,9 @@ export class DiamondHalftone {
           r *= scale!(mr / n, mg / n, mb / n, x, y, i, j);
           if (r < 0.1) continue;
         }
-        const path = (marked * 2 > ink ? accentPaths : paths)[Math.round(Math.min(1, shade / ink) * last)];
+        // Thresholds two cells over from the size's, so the dots that round up in size aren't the first to change ramp.
+        const accented = marked > (ink * (BAYER4[((i + 2) & 3) | (((j + 2) & 3) << 2)] + 0.5)) / 16;
+        const path = (accented ? accentPaths : paths)[Math.round(Math.min(1, shade / ink) * last)];
         if (dot === "round") {
           r *= ROUND;
           path.moveTo(x + r, y);

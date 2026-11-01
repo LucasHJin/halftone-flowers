@@ -6,15 +6,18 @@
  * flower. It drifts away to the left or the right along a wandering curve,
  * some sailing far across the bed, others sinking toward the ground, now and
  * then looping the loop, turning and rocking as it goes. None fade: each keeps
- * going until it's off the screen.
+ * going until it's off the screen. A moment after it comes off, it turns
+ * over a second or so from its flower's colours to the pointer trail's,
+ * keeping its shading, the new colour spreading across it from where the
+ * flower was clicked, dot by dot along a soft front.
  *
  * Each keeps the depth of the flower it came from, just in front of it, so it
  * passes over plants further back and behind nearer ones, and never changes
  * places with a plant it's over.
  *
  * A click that misses the flowers puffs tiny petals out from the spot instead,
- * copies of petals off a few flowers in the bed, in the colours the insects
- * and the pointer's trail print in. Each is at its own depth among the plants,
+ * copies of petals off a few flowers in the bed, in the pointer trail's
+ * colours from the start. Each is at its own depth among the plants,
  * like an insect, so some pass in front of flowers and some behind, the ones
  * further back a little smaller and lighter. They fly out all round, each
  * growing in as it goes and swelling a little past its size, slow as the puff
@@ -51,6 +54,10 @@ const PUFF = 0.22;
 /** How many flowers in the bed a puff's petals copy. */
 const SOURCES = 3;
 
+/** How deep the soft front the trail's colours spread across a petal behind is, in diamonds, and how many steps it's painted in. */
+const FRONT = 2;
+const FRONT_STEPS = 4;
+
 /** How far past its size a puff's petal swells as it grows in, as a back-ease's overshoot: about an eighth. */
 const SWELL = 2;
 
@@ -63,6 +70,8 @@ interface Coming {
   stem: Stem;
   k: number;
   at: number;
+  /** Where the flower was clicked. */
+  tap: [number, number];
 }
 
 interface LoosePetal {
@@ -104,8 +113,47 @@ interface LoosePetal {
   swell: number;
   /** Px a second it's still rushing out from a puff, dying down. */
   kick: [number, number];
-  /** Prints in the accent ramp, the pointer trail's colours, as a puff's petals do. */
-  accent: boolean;
+  /** Puffed out by a click that missed the flowers, rather than shaken off one: shaded by its own depth, not its flower's. */
+  puffed: boolean;
+  /**
+   * Its turning to the pointer trail's colours: where on it the change starts,
+   * in its own frame as it came off, how far from there each even share of it
+   * is (see sharesFrom), the seconds after it comes off that it starts, and the
+   * seconds it takes; none for a puff's, which starts in them.
+   */
+  turn: { x: number; y: number; shares: number[]; wait: number; takes: number };
+}
+
+let probe: CanvasRenderingContext2D | null = null;
+
+/** How many even shares of a petal's area its turning colour is timed by. */
+const SHARES = 10;
+
+/**
+ * How far from (x, y), in its own frame, a loose petal `length` px long has
+ * each even share of its area, from where it's painted: the nearest it comes,
+ * then out past a tenth of it, two tenths and so on to the furthest.
+ */
+function sharesFrom(paint: LoosePaint, length: number, x: number, y: number): number[] {
+  // It's drawn about its middle, curling a little past its length at most.
+  const size = Math.ceil(length * 1.5) + 4;
+  probe ??= document.createElement("canvas").getContext("2d", { willReadFrequently: true })!;
+  const c = probe.canvas;
+  if (c.width < size || c.height < size) [c.width, c.height] = [size, size];
+  probe.setTransform(1, 0, 0, 1, 0, 0);
+  probe.clearRect(0, 0, size, size);
+  probe.translate(size / 2, size / 2);
+  paint(probe, 0);
+  const data = probe.getImageData(0, 0, size, size).data;
+  const all: number[] = [];
+  for (let j = 0; j < size; j++) {
+    for (let i = 0; i < size; i++) {
+      if (data[(j * size + i) * 4 + 3] >= 128) all.push(Math.hypot(i + 0.5 - size / 2 - x, j + 0.5 - size / 2 - y));
+    }
+  }
+  if (!all.length) return [0, Math.hypot(x, y) + length / 2];
+  all.sort((a, b) => a - b);
+  return Array.from({ length: SHARES + 1 }, (_, k) => all[Math.min(all.length - 1, Math.round((k / SHARES) * (all.length - 1)))]);
 }
 
 /** How a petal drifts once loose, its own pace, wandering, loops and tumbling, from still. */
@@ -137,26 +185,33 @@ export class Petals {
     this.coming = [];
   }
 
-  /** Shakes one of the petals the head on `s` has left off it, a moment into its nod. */
-  shed(plant: Plant, s: Stem) {
+  /** Shakes one of the petals the head on `s` has left off it, a moment into its nod from a click at (x, y). */
+  shed(plant: Plant, s: Stem, x: number, y: number) {
     const h = s.head!;
     const left = petalIndices(s, h).filter((k) => !h.lost.has(k) && !this.coming.some((c) => c.stem === s && c.k === k));
     if (!left.length || this.list.length + this.coming.length >= MOST) return;
     // A peony's outer petals go first.
     const k = left[Math.floor(Math.random() * (h.kind === "peony" ? Math.min(3, left.length) : left.length))];
-    this.coming.push({ plant, stem: s, k, at: this.garden.time + lerp(0.05, 0.15, Math.random()) });
+    this.coming.push({ plant, stem: s, k, at: this.garden.time + lerp(0.05, 0.15, Math.random()), tap: [x, y] });
   }
 
   /** Petal `k` comes off its head, right where it was. */
-  private loosen({ plant, stem: s, k }: Coming) {
+  private loosen({ plant, stem: s, k, tap }: Coming) {
     const { cell, settings, time, bloom } = this.garden;
-    const { size, sink } = settings.petals;
+    const { size, sink, wait, turn } = settings.petals;
     const h = s.head!;
     h.lost.add(k);
     const look = looseLook(s, h, k, cell, size);
     const at = petalAt(s, h, k, time);
     // Mostly off to the side it was on, setting out the way it pointed and lifting, from still.
     const side = Math.cos(at.a) + lerp(-0.6, 0.6, Math.random()) >= 0 ? 1 : -1;
+    const from = Math.min(1, 1 / look.scale);
+    // The click in its own frame, unturned and at its loose size, as it is the moment it comes off.
+    const dx = tap[0] - at.x;
+    const dy = tap[1] - at.y;
+    const ox = (dx * Math.cos(at.a) + dy * Math.sin(at.a)) / from;
+    const oy = (dy * Math.cos(at.a) - dx * Math.sin(at.a)) / from;
+    const shares = sharesFrom(look.paint, look.length, ox, oy);
     this.list.push({
       ...drifting(bloom, sink),
       x: at.x,
@@ -170,10 +225,11 @@ export class Petals {
       flip: 0,
       paint: look.paint,
       length: look.length,
-      from: Math.min(1, 1 / look.scale),
+      from,
       swell: 0,
       kick: [0, 0],
-      accent: false,
+      puffed: false,
+      turn: { x: ox, y: oy, shares, wait: lerp(wait[0], wait[1], Math.random()), takes: lerp(turn[0], turn[1], Math.random()) },
     });
   }
 
@@ -213,7 +269,8 @@ export class Petals {
         from: SEED,
         swell: SWELL,
         kick: [Math.cos(a) * rush, Math.sin(a) * rush],
-        accent: true,
+        puffed: true,
+        turn: { x: 0, y: 0, shares: [], wait: 0, takes: 0 },
       });
     }
   }
@@ -291,10 +348,31 @@ export class Petals {
     ctx.scale(grown, grown * Math.max(Math.abs(face), 0.55));
     // Its inner face prints lighter than its back. A puff's petal prints lighter the further back it is, as an insect does; the rest in their flower's shade.
     const { shade } = this.garden.settings;
-    const by = p.accent ? shade.depth * (p.z - 1) : plantShade(p.plant, shade);
+    const by = p.puffed ? shade.depth * (p.z - 1) : plantShade(p.plant, shade);
     const paint = () => inShade(by, () => inLight(() => p.paint(ctx, -lightStrength() * face * off)));
-    if (p.accent) inAccent(paint);
-    else paint();
+    const { x, y, shares, wait, takes } = p.turn;
+    const turned = takes > 0 ? (p.age - wait) / takes : 1;
+    if (turned >= 1) inAccent(paint);
+    else if (turned <= 0) paint();
+    else {
+      paint();
+      // The trail's colours over it, inside a circle growing from where it was clicked, a step stronger each smaller one, so the front is soft.
+      // It sweeps an even share of the petal each moment, so the change takes the whole time rather than racing across its broad middle.
+      const depth = FRONT * this.garden.cell;
+      const at = turned * SHARES;
+      const k = Math.floor(at);
+      const r = lerp(shares[k], shares[k + 1], at - k) + depth * turned;
+      for (let m = 0; m < FRONT_STEPS && r - (depth * m) / FRONT_STEPS > 0; m++) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x, y, r - (depth * m) / FRONT_STEPS, 0, TAU);
+        ctx.clip();
+        // Laid over the last, this brings the trail's share there up to (m + 1) / FRONT_STEPS.
+        ctx.globalAlpha = 1 / (FRONT_STEPS - m);
+        inAccent(paint);
+        ctx.restore();
+      }
+    }
     ctx.restore();
   }
 }

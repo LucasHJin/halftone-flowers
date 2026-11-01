@@ -267,7 +267,7 @@ export class Garden {
     const [plant, s] = hit;
     const { strength, limit } = this.settings.cursor;
     s.gust = limit * Math.tanh((s.gust + strength * this.catches(s) * TAP) / limit);
-    this.petals.shed(plant, s);
+    this.petals.shed(plant, s, x, y);
   }
 
   /** The pointer moved to (x, y). Stems it passes through lean the way it's going, then drift back. */

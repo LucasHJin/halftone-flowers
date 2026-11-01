@@ -189,6 +189,10 @@ const CONFIG = {
     speed: slider(petals.speed, 0.2, 3, 0.05),
     sink: slider(petals.sink, 0, 1, 0.01),
     loops: slider(petals.loops, 0, 30, 0.5),
+    waitMin: slider(petals.wait[0], 0, 2, 0.01),
+    waitMax: slider(petals.wait[1], 0, 2, 0.01),
+    turnMin: slider(petals.turn[0], 0.1, 4, 0.05),
+    turnMax: slider(petals.turn[1], 0.1, 4, 0.05),
   },
   trail: {
     _collapsed: true,
@@ -362,6 +366,8 @@ function toOptions(v: Values, seed: number): FlowerFieldOptions {
         speed: petals.speed,
         sink: petals.sink,
         loops: petals.loops,
+        wait: [petals.waitMin, petals.waitMax],
+        turn: [petals.turnMin, petals.turnMax],
       },
       trail: {
         enabled: trail.enabled,

@@ -163,6 +163,10 @@ export interface PetalSettings {
   sink: number;
   /** How many times a minute each loops the loop, on average; more often in a gust. */
   loops: number;
+  /** Shortest and longest seconds each stays its flower's colours once loose, before it starts to turn the pointer trail's. */
+  wait: [number, number];
+  /** Shortest and longest seconds each then takes to turn from its flower's colours to the pointer trail's, spreading across it from where it was clicked. */
+  turn: [number, number];
 }
 
 /**
@@ -258,7 +262,7 @@ export const DEFAULT_SETTINGS: FlowerSettings = {
     stay: [1.5, 5],
     trail: { fade: 2.5, width: 3.5, strength: 0.9 },
   },
-  petals: { enabled: true, size: 1, speed: 1, sink: 0.4, loops: 8 },
+  petals: { enabled: true, size: 1, speed: 1, sink: 0.4, loops: 8, wait: [0.1, 0.2], turn: [1, 1.4] },
   trail: { enabled: true, hold: 0.4, fade: 0.4, width: 3.5, strength: 0.9, strands: 3, spread: 14, wave: 150, flow: 3, lag: 0.02 },
   splash: { enabled: true, count: [8, 14], size: [0.55, 0.9], reach: [0.8, 2] },
 };
