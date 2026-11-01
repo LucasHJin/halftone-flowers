@@ -9,7 +9,7 @@
  * passes through the head of the flower it's visiting or the one it just
  * left: while over it, it keeps to its own side, and crosses over only once
  * clear. It only settles where nearer plants don't hide it. It prints in the
- * halftone's accent ramp.
+ * halftone's accent ramp. Clicked or tapped, it sends up a heart.
  */
 import { clamp, lerp, TAU } from "../../../utils/math";
 import type { Garden } from "../garden";
@@ -18,6 +18,7 @@ import type { Plant, Stem } from "../types";
 import { BEE } from "./bee";
 import { BUTTERFLY } from "./butterfly";
 import { Cover } from "./cover";
+import { follow, paintHeart, sendHeart, type Heart } from "./heart";
 import { beside, clearOf, DEPTH, ease, orient, perch, randomQuirks, REACH, steer, wrap, type Flower, type Insect, type InsectGroup, type InsectKind } from "./insect";
 import { expire, extend, paintSegment, type Trail } from "./trail";
 
@@ -34,22 +35,27 @@ const AHEAD = 0.12;
 /** Most of where it would sit that nearer plants may hide for an insect to settle on a flower. */
 const HIDDEN = 0.12;
 
+/** The most hearts showing at once; past this, clicking one sends up no more. */
+const HEARTS = 12;
+
 /** Where to fly to: across, down, and depth. */
 type Goal = readonly [number, number, number];
 
 type Edge = "left" | "right" | "top";
 
-/** One thing to paint: an insect, or one segment of a trail. */
+/** One thing to paint: an insect, one segment of a trail, or a heart. */
 interface Part {
   z: number;
   insect: Insect | null;
   trail: Trail | null;
   i: number;
+  heart: Heart | null;
 }
 
 export class Insects {
   list: Insect[] = [];
   private trails: Trail[] = [];
+  private hearts: Heart[] = [];
   /** Seconds until the next one is due. */
   private wait = 0;
   private parts: Part[] = [];
@@ -64,6 +70,7 @@ export class Insects {
   reset() {
     this.list = [];
     this.trails = [];
+    this.hearts = [];
     this.wait = this.gap() * 0.4;
   }
 
@@ -147,6 +154,24 @@ export class Insects {
     this.trails.push(b.trail);
   }
 
+  /** The insect showing at (x, y), going by `cover` as last painted, the nearest if there are several; null if none. */
+  at(x: number, y: number, cover: Cover) {
+    let hit: Insect | null = null;
+    for (const b of this.list) {
+      // A little wider than it is, since it's small and on the move.
+      if (Math.hypot(x - b.x, y - b.y - b.bob) > Math.max(b.size * 0.7, this.garden.cell * 3)) continue;
+      if (cover.hidden(x, y, 2, b.z) > 0.5 || (hit && hit.z > b.z)) continue;
+      hit = b;
+    }
+    return hit;
+  }
+
+  /** Sends a heart up out of `b`. */
+  love(b: Insect) {
+    const { bloom, settings, time } = this.garden;
+    if (this.hearts.length < HEARTS) this.hearts.push(sendHeart(b, bloom, settings.insects.heart, time));
+  }
+
   step(dt: number) {
     const garden = this.garden;
     const settings = garden.settings.insects;
@@ -168,16 +193,18 @@ export class Insects {
     });
     for (const t of this.trails) expire(t, garden.time, settings.trail.fade);
     this.trails = this.trails.filter((t) => t.owner || t.points.length > 1);
+    this.hearts = this.hearts.filter((h) => follow(h, garden.time, this.list));
   }
 
   /** Gathers everything to paint in depth order, ready for paintNext. */
   beginPaint() {
     const parts: Part[] = [];
     for (const trail of this.trails) {
-      for (let i = 1; i < trail.points.length; i++) parts.push({ z: trail.points[i].z, insect: null, trail, i });
+      for (let i = 1; i < trail.points.length; i++) parts.push({ z: trail.points[i].z, insect: null, trail, i, heart: null });
     }
     // Over its own trail.
-    for (const b of this.list) parts.push({ z: b.z + ON_TOP / 2, insect: b, trail: null, i: 0 });
+    for (const b of this.list) parts.push({ z: b.z + ON_TOP / 2, insect: b, trail: null, i: 0, heart: null });
+    for (const heart of this.hearts) parts.push({ z: heart.z + ON_TOP / 2, insect: null, trail: null, i: 0, heart });
     parts.sort((a, b) => a.z - b.z);
     this.parts = parts;
     this.next = 0;
@@ -192,8 +219,9 @@ export class Insects {
   paintNext(ctx: CanvasRenderingContext2D) {
     const { settings, time } = this.garden;
     const shade = settings.shade.depth;
-    const { insect, trail, i } = this.parts[this.next++];
+    const { insect, trail, i, heart } = this.parts[this.next++];
     if (trail) paintSegment(ctx, trail, i, time, settings.insects.trail, shade);
+    else if (heart) paintHeart(ctx, heart, time, settings.insects.trail, shade * (heart.z - 1));
     else if (insect) {
       // Nearer ones a little bigger and darker, as the flowers are.
       const z = clamp(insect.z, 0, 1);

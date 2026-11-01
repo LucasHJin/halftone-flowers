@@ -5,7 +5,8 @@
  * lag and overshoot a little while short ones follow closely. The pointer stirs
  * up its own breeze through the same springs, so brushed flowers lean away and
  * drift back as unhurriedly as everything else. A click or tap on a flower
- * nods it the same way and shakes a petal loose.
+ * nods it the same way and shakes a petal loose; on a butterfly or bee, it
+ * sends up a heart.
  */
 import { clamp, createRandom, lerp, TAU } from "../../utils/math";
 import type { FlowerSettings, Mix } from "./settings";
@@ -237,8 +238,9 @@ export class Garden {
   }
 
   /**
-   * A click or tap at (x, y). The flower it's on nods as if brushed and shakes
-   * a petal loose: the one that shows there, or failing that, where
+   * A click or tap at (x, y). An insect it's on, that no nearer plant hides
+   * there, sends up a heart. Otherwise the flower it's on nods as if brushed
+   * and shakes a petal loose: the one that shows there, or failing that, where
    * another plant's stem or leaf crosses it, the one it's furthest inside or
    * closest to, within half the pointer's reach. Anywhere else, tiny petals
    * puff out from it.
@@ -246,6 +248,8 @@ export class Garden {
   tap(x: number, y: number) {
     if (this.growing !== null) return;
     this.cover.paint(this);
+    const insect = this.settings.insects.heart.enabled ? this.insects.at(x, y, this.cover) : null;
+    if (insect) return this.insects.love(insect);
     let hit: [Plant, Stem] | null = null;
     let best = this.hand * 0.5;
     for (const plant of this.plants) {

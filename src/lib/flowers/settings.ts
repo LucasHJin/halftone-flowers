@@ -132,6 +132,23 @@ export interface TrailSettings {
   strength: number;
 }
 
+/**
+ * The heart a butterfly or bee sends up when it's clicked or tapped: a line
+ * like its trail, in the trail's width and strength, rising out of it and
+ * drawing a heart, which swells a little and fades.
+ */
+export interface HeartSettings {
+  enabled: boolean;
+  /** Smallest and biggest across, in base flower sizes. */
+  size: [number, number];
+  /** Shortest and longest seconds the line takes to rise out of the insect and draw the heart round. */
+  draw: [number, number];
+  /** Least and most it then swells, as a share of its size. */
+  swell: [number, number];
+  /** Shortest and longest seconds it takes to swell and fade away. */
+  fade: [number, number];
+}
+
 /** Butterflies and bees that now and then fly in, visit a few flowers and leave. */
 export interface InsectSettings {
   enabled: boolean;
@@ -150,6 +167,7 @@ export interface InsectSettings {
   /** Shortest and longest stay on each flower, seconds. */
   stay: [number, number];
   trail: TrailSettings;
+  heart: HeartSettings;
 }
 
 /** Petals that come loose, one a click, when a flower is clicked or tapped, and drift away to the left or right. */
@@ -261,6 +279,7 @@ export const DEFAULT_SETTINGS: FlowerSettings = {
     visits: [0, 3],
     stay: [1.5, 5],
     trail: { fade: 2.5, width: 3.5, strength: 0.9 },
+    heart: { enabled: true, size: [1, 1.5], draw: [0.65, 0.9], swell: [0.2, 0.35], fade: [0.6, 0.8] },
   },
   petals: { enabled: true, size: 1, speed: 1, sink: 0.4, loops: 8, wait: [0.1, 0.2], turn: [1, 1.4] },
   trail: { enabled: true, hold: 0.4, fade: 0.4, width: 3.5, strength: 0.9, strands: 3, spread: 14, wave: 150, flow: 3, lag: 0.02 },

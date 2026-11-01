@@ -4,6 +4,7 @@ export {
   type CursorSettings,
   type FlowerSettings,
   type FlowerSettingsInput,
+  type HeartSettings,
   type InsectSettings,
   type LayoutSettings,
   type Mix,
