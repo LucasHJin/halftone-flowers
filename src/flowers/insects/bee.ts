@@ -1,25 +1,17 @@
-/**
- * Bees: a striped abdomen hanging from a fuzzy thorax, legs dangling, under
- * beating wings. They fly quicker and straighter than butterflies, nose up
- * when slow and tipped forward as they speed off, mostly hover facing a
- * flower before deciding, and sometimes move on without settling.
- *
- * Each is one of a few real species, told apart by build, banding and wings.
- */
 import { clamp, lerp, TAU } from "../../utils/math.js";
 import { tone } from "../paint/tone.js";
 import type { Ink } from "../types.js";
 import { climb, ease, headway, surge, type FlightStyle, type Insect, type InsectGroup, type Species } from "./insect.js";
 import { add, addBall, addBody, addLimb, cross, paintParts, posed, type Pose, type Part, type Section, type Vec } from "./pose.js";
 
-/** Wing beats a second: a real bee's are a blur, so slowed to what the screen can show beating. */
+/** Wing beats a second, far below a real bee's so the beat shows on screen. */
 const BUZZ = 14;
 /** How far above the flower's middle the body sits on its legs, sizes. */
 const STAND = 0.2;
 /** Where the thorax is, in the bee's frame. */
 const THORAX: Vec = [0.22, 0.05, 0];
 
-/** Each leg on the right side, from the thorax out: dangling in flight, and standing. */
+/** Right-side legs, points from the thorax out, dangling in flight and standing. */
 const LEGS: { flying: Vec[]; standing: Vec[] }[] = [
   {
     flying: [[0.3, -0.1, 0.06], [0.36, -0.24, 0.1], [0.32, -0.36, 0.1]],
@@ -36,17 +28,17 @@ const LEGS: { flying: Vec[]; standing: Vec[] }[] = [
 ];
 
 interface Bee extends Species {
-  /** Radii of its head and thorax, sizes, and the thorax's ink moved `by` along the ramp. */
+  /** Radii of its head and thorax, sizes, and the thorax's ink and ramp shift. */
   head: number;
   thorax: number;
   coat: [Ink, number];
-  /** How long and thick its abdomen is, sizes, and how full its outline: 1 tapers like a spindle, lower is rounder. */
+  /** Abdomen length and girth, sizes, and taper: 1 is spindle-shaped, lower is rounder. */
   length: number;
   girth: number;
   taper: number;
-  /** The abdomen's ink and shift along the ramp `t` of the way from its waist to its tip. */
+  /** The abdomen's ink and ramp shift `t` of the way from its waist to its tip. */
   band(t: number): [Ink, number];
-  /** How big its wings are against its body, and their ink and shift along the ramp. */
+  /** Wing scale against the body, and the wings' ink and ramp shift. */
   wings: number;
   membrane: [Ink, number];
   /** Multiple of its kind's wing beat: bigger bees beat slower. */
@@ -69,7 +61,7 @@ const HONEYBEE: Bee = {
   // Wide enough to print as rows of dots.
   band: (t) => (t < 0.24 || (t > 0.46 && t < 0.68) ? [2, 0.12] : [1, 0.12]),
   wings: 1,
-  // A shade further along the ramp than its palest end, so they stand out from the page.
+  // A shade darker than the palest ink, so the wings stand out from the page.
   membrane: [2, 0.12],
   buzz: 1,
 };
@@ -161,7 +153,7 @@ export const BEE: InsectGroup = {
     b.air = ease(b.air, b.phase === "landed" ? 0 : 1, 0.12, dt);
     b.flap += TAU * BUZZ * SPECIES[b.species].buzz * b.quirks.pace * rate * b.air * dt;
     b.bob = b.size * 0.03 * Math.sin(b.age * TAU * 2.1 + b.wobble[2]) * b.air;
-    // Nose up and abdomen hanging when slow, flatter at speed; tipped forward to speed up and back to slow down.
+    // Nose up when slow, flatter at speed; tips forward to speed up, back to slow down.
     const pitch = lerp(0.04, 0.5 - 0.32 * headway(b, FLIGHT) - 0.3 * surge(b, FLIGHT) + 0.2 * climb(b, FLIGHT), b.air);
     b.pitch = ease(b.pitch, pitch, 0.1, dt);
     b.tilt = ease(b.tilt, lerp(clamp(b.lean * 0.5, -0.6, 0.6), 0, b.air), 0.2, dt);
@@ -173,7 +165,7 @@ export const BEE: InsectGroup = {
     ctx.translate(0, -STAND * s * (1 - b.air));
     const pose = posed(b, s);
     const parts: Part[] = [];
-    // The head just in front of the thorax, the antennae from its brow.
+    // x of the head's middle, just in front of the thorax; the antennae start from it.
     const head = THORAX[0] + sp.thorax + sp.head * 0.5;
     addBall(parts, ctx, pose, [head, 0.02, 0], sp.head, 1, 0);
     addBall(parts, ctx, pose, THORAX, sp.thorax, ...sp.coat);
@@ -209,11 +201,7 @@ function abdomen(sp: Bee, droop: number): Section[] {
   return sections;
 }
 
-/**
- * One side's fore and hind wings: folded back along the abdomen at rest, and
- * in flight beating up and down, swept back. A little see-through over the
- * body.
- */
+/** One side's fore and hind wings: folded back along the abdomen at rest, beating up and down in flight. */
 function wings(parts: Part[], ctx: CanvasRenderingContext2D, pose: Pose, b: Insect, sp: Bee, side: number) {
   const root = mirror([THORAX[0] - 0.04, THORAX[1] + sp.thorax - 0.06, 0.06], side);
   const lift = lerp(0.1, 0.45 + 0.6 * b.quirks.stroke * Math.sin(b.flap), b.air);
@@ -239,7 +227,7 @@ function wings(parts: Part[], ctx: CanvasRenderingContext2D, pose: Pose, b: Inse
   });
 }
 
-/** A wing's long axis, swept `sweep` radians from straight back toward straight out and raised `lift` above level, and its width across, held level. */
+/** A wing's long axis, swept `sweep` radians from straight back toward straight out and raised `lift` radians, and its level cross axis. */
 function axes(sweep: number, lift: number, side: number): [Vec, Vec] {
   return [
     [-Math.cos(sweep) * Math.cos(lift), Math.sin(lift), side * Math.sin(sweep) * Math.cos(lift)],

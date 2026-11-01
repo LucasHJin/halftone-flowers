@@ -1,4 +1,3 @@
-/** Shared drawing helpers for the tone image. */
 import { clamp, createRandom, lerp, TAU } from "../../utils/math.js";
 import type { ShadeSettings } from "../settings.js";
 import { SEGMENTS } from "../stem.js";
@@ -13,9 +12,8 @@ let lit = false;
 let accent = false;
 
 /**
- * Fill style for `amount` of one ink, moved `by` along the ramp toward dark:
- * red is how much ink, green that times how far toward dark it sits, and blue
- * as much as red where it prints in the accent ramp.
+ * Fill for `amount` of `ink`, moved `by` along the ramp toward dark. Red: ink
+ * amount. Green: red × ramp place. Blue: red in the accent ramp, else 0.
  */
 export function tone(ink: Ink, amount: number, by = 0) {
   if (mask) return mask;
@@ -35,7 +33,7 @@ export function inAccent(paint: () => void) {
   }
 }
 
-/** How far along the ramp a plant prints from the rest: lighter toward the back, plus a nudge of its own that holds steady from frame to frame. */
+/** Ramp shift for `plant`, so overlapping plants differ: lighter toward the back, plus a nudge seeded by its id. */
 export function plantShade(plant: Plant, shade: ShadeSettings) {
   return shade.depth * (plant.depth - 1) + shade.jitter * (2 * createRandom(plant.stems[0].id)() - 1);
 }
@@ -50,7 +48,7 @@ export function inShade(by: number, paint: () => void) {
   }
 }
 
-/** Runs `paint` with every fill and stroke in one flat colour instead of its inks, to draw a mask. */
+/** Runs `paint` with `tone` returning flat `colour`, to draw a mask. */
 export function inMask(colour: string, paint: () => void) {
   mask = colour;
   try {
@@ -60,18 +58,14 @@ export function inMask(colour: string, paint: () => void) {
   }
 }
 
-/** Toward the light on screen: the upper left. */
+/** Unit vector toward the light on screen. */
 const SUN = { x: -0.6, y: -0.8 };
-/** Toward the light in the frame heads are being drawn in. */
+/** `SUN` in the current head's frame, set by `aimLight`. */
 const sun = { ...SUN };
 /** Half the ramp distance between a head's lit and shaded sides. */
 let light = 0;
 
-/**
- * Runs `paint` with inks kept at least half the light's range in from either
- * end of the ramp, so a head in the darkest or palest ink still shades both
- * lighter and darker.
- */
+/** Runs `paint` with inks kept `light` in from both ramp ends, so the darkest and palest heads still shade both ways. */
 export function inLight(paint: () => void) {
   lit = true;
   try {
@@ -81,12 +75,12 @@ export function inLight(paint: () => void) {
   }
 }
 
-/** Sets how far along the ramp the side of a head facing the light prints from the side facing away. */
+/** Sets the ramp distance between a head's lit and shaded sides. */
 export function setLight(strength: number) {
   light = strength / 2;
 }
 
-/** Points the light into a frame rotated `angle` radians from the screen, for the head about to be drawn in it. */
+/** Rotates `sun` into a frame rotated `angle` radians from the screen, for the next head. */
 export function aimLight(angle: number) {
   const c = Math.cos(angle);
   const s = Math.sin(angle);
@@ -94,11 +88,7 @@ export function aimLight(angle: number) {
   sun.y = -s * SUN.x + c * SUN.y;
 }
 
-/**
- * The light's direction in a frame further transformed by
- * `ctx.transform(a, b, c, d, …)`, so a gradient drawn along it still runs
- * toward the light on screen.
- */
+/** `sun` in a frame further transformed by `ctx.transform(a, b, c, d, …)`, so a gradient along it still runs toward the light on screen. */
 export function lightThrough(a: number, b: number, c: number, d: number): [number, number] {
   const det = a * d - b * c || 1;
   const x = (d * sun.x - c * sun.y) / det;
@@ -115,12 +105,12 @@ export function litBy(x: number, y: number, z = 0) {
   return (-light * (x * sun.x + y * sun.y)) / (Math.hypot(x, y, z) || 1);
 }
 
-/** Half the ramp distance between lit and shaded sides, for shadows deep in a flower. */
+/** Half the ramp distance between lit and shaded sides. */
 export function lightStrength() {
   return light;
 }
 
-/** Fill for a round boss of radius `r` at (x, y), shaded like a dome: brightest a little toward the light, darkest round the far edge. */
+/** Dome-shaded fill for a round boss of radius `r` at (x, y): brightest a little toward the light, darkest all round the rim. */
 export function dome(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, ink: Ink, amount: number, [lx, ly] = [sun.x, sun.y]) {
   const g = ctx.createRadialGradient(x + lx * r * 0.45, y + ly * r * 0.45, 0, x, y, r);
   g.addColorStop(0, tone(ink, amount, -light));
@@ -129,9 +119,8 @@ export function dome(ctx: CanvasRenderingContext2D, x: number, y: number, r: num
 }
 
 /**
- * Fill moved `by` along the ramp and shaded straight across a shape reaching
- * `r` px from (x, y): lighter toward the light. A hollow is lit on its far
- * side, so pass the light reversed.
+ * Linear fill across a shape reaching `r` px from (x, y), lighter toward the light,
+ * moved `by` along the ramp. A hollow is lit on its far side: pass the light reversed.
  */
 export function acrossLight(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, ink: Ink, amount: number, [lx, ly] = [sun.x, sun.y], by = 0) {
   const g = ctx.createLinearGradient(x + lx * r, y + ly * r, x - lx * r, y - ly * r);
@@ -153,7 +142,6 @@ export function along(s: Stem, f: number) {
   return at;
 }
 
-/** Fills one ellipse in the current fill style. */
 export function blob(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, rotation: number) {
   ctx.beginPath();
   ctx.ellipse(x, y, rx, ry, rotation, 0, TAU);

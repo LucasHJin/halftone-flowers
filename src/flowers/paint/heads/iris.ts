@@ -4,9 +4,8 @@ import { blob, litBy, tone } from "../tone.js";
 import { fillPetal, headFrame, paintInDepth, petal, type Part } from "./petals.js";
 
 /**
- * Bearded irises: three petals standing up and folding in over the middle,
- * and three falling away between them in `centre` ink, each with a pale beard
- * along its top.
+ * Bearded irises: three upright petals folding in over the middle, and three
+ * falls drooping between them in `centre` ink, each with a pale beard on top.
  */
 export function paintIris(ctx: CanvasRenderingContext2D, h: Head) {
   const R = h.radius;
@@ -14,7 +13,7 @@ export function paintIris(ctx: CanvasRenderingContext2D, h: Head) {
   const beard = h.centre === 2 ? 0 : 2;
   const parts: Part[] = [];
   if (h.lost.size) {
-    // The swelling at the top of the stem the petals grew from, hidden while they're all there.
+    // Swelling at the stem top the petals grew from, hidden while every petal is on.
     ctx.fillStyle = tone(1, 0.75, litBy(-0.5, -0.5));
     blob(ctx, 0, -R * 0.08, R * 0.14, R * 0.18, 0);
   }
@@ -53,7 +52,7 @@ export function paintIris(ctx: CanvasRenderingContext2D, h: Head) {
         const near = clamp(down.z / R, -1, 1);
         ctx.fillStyle = tone(h.centre, h.tone * (0.9 + 0.1 * near), 0.06 * near + litBy(...down.normal));
         fillPetal(ctx, down);
-        // The beard is on the top of the fall, so only falls toward you show it.
+        // The beard is on top of the fall, so only falls toward you show it.
         if (down.z < R * 0.1) return;
         const rib = down.rib;
         ctx.strokeStyle = tone(beard, h.tone);

@@ -19,11 +19,11 @@ const { layout, species, mix, tone, shade, wind, sway, cursor, spawn, insects, p
 const KINDS = Object.keys(species) as Kind[];
 const LEAVES: LeafShape[] = ["lance", "strap", "oval"];
 
-/** How fast a 320px stem swings at sway speed 1, radians a second (see createStem). */
+/** Angular speed of a 320px stem at sway speed 1, radians a second (see createStem). */
 const BASE_OMEGA = Math.PI;
 /** Heavy enough that DialKit's stiffness and damping sliders step finely through slow sways. */
 const SWAY_MASS = 10;
-/** Any faster, or damped past 1, and the 60 Hz step can't keep the quickest stems stable. */
+/** Any faster, or damping past 1, and the 60 Hz step can't keep the quickest stems stable. */
 const MAX_SPEED = 5;
 
 function slider(value: number, min: number, max: number, step: number): [number, number, number, number] {
@@ -34,7 +34,7 @@ function perKind<T>(make: (kind: Kind) => T, kinds = KINDS) {
   return Object.fromEntries(kinds.map((kind) => [kind, make(kind)])) as Record<Kind, T>;
 }
 
-/** The mix's own kinds in its order, then the rest. Picking walks the mix in order, so this keeps a seed's bed the same. */
+/** The mix's kinds in its own order, then the rest. Picking walks the mix in order, so this keeps a seed's bed unchanged. */
 function mixOrder(m: Mix) {
   return [...(Object.keys(m) as Kind[]), ...KINDS.filter((kind) => !(kind in m))];
 }
@@ -84,7 +84,7 @@ function swaySpring({ speed, damping }: SwaySettings): SpringConfig {
   return { type: "spring", stiffness, damping: 2 * damping * Math.sqrt(stiffness * SWAY_MASS), mass: SWAY_MASS };
 }
 
-/** Undoes swaySpring. Time mode converts the way Motion does, though its 1s cap is faster than the default sway. */
+/** Inverse of swaySpring. Time mode converts as Motion does, though its 1s cap is faster than the default sway. */
 function springSway(spring: TransitionConfig): Pick<SwaySettings, "speed" | "damping"> {
   if (spring.type !== "spring") return sway;
   let omega: number;
@@ -122,10 +122,8 @@ const CONFIG = {
     autoCell: true,
     cell: slider(8, 3, 20, 1),
     steps: slider(6, 1, 10, 1),
-    // Squares sit level; diamonds point up, down and to the sides, their sides curved in by `curve`.
     dot: { type: "select", options: ["round", "square", "diamond"], default: "round" },
     curve: slider(0.75, 0, 1, 0.01),
-    // Staggered rows like a print screen, or straight rows and columns.
     grid: { type: "select", options: ["diagonal", "straight"], default: "diagonal" },
     spread: slider(0.1, 0, 0.5, 0.01),
     threshold: slider(0.26, 0.05, 0.95, 0.01),
@@ -412,9 +410,8 @@ function toOptions(v: Values, seed: number): FlowerFieldOptions {
 const randomSeed = () => (Math.random() * 2 ** 32) >>> 0;
 
 /**
- * The default colours turned to one random hue at least 60° round from `from`,
- * at a random vividness from grey to the defaults' own. Each keeps its
- * lightness (see withHue), so the shades step the same way whatever comes up.
+ * The default colours at one random hue at least 60° from `from`, and a random vividness from grey
+ * to the defaults' own. Lightness stays (see withHue), so the shades step the same for any hue.
  */
 function randomColors(from: number) {
   const hue = from + 60 + Math.random() * 240;
@@ -429,10 +426,8 @@ function randomColors(from: number) {
 }
 
 /**
- * A DialKit panel for every FlowerField option and setting, starting from the
- * defaults. Key the FlowerField on `generation`: "Grow again" and "New bed"
- * remount it so it grows in, and spawn settings only apply then. The insect
- * buttons send one in through `field`.
+ * A DialKit panel for every FlowerField option and setting. Key the FlowerField on `generation`:
+ * "Grow again" and "New bed" remount it to grow in again, which is when spawn settings apply.
  */
 export function useFlowerDials(field: RefObject<FlowerFieldHandle | null>) {
   const [seed, setSeed] = useState(randomSeed);

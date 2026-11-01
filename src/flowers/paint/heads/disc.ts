@@ -2,10 +2,7 @@ import { TAU } from "../../../utils/math.js";
 import type { Head, Stem } from "../../types.js";
 import { dome, lightStrength, lightThrough, litBy, tone } from "../tone.js";
 
-/**
- * Fill for one petal moved `by` along the ramp: deepest at the base, in the
- * centre's shadow, fading toward the tip, optionally blushing from another ink.
- */
+/** Petal fill moved `by`: darkest at the base, in the centre's shadow, paler to the tip. `h.blush` starts it in `centre` ink. */
 function petalFill(ctx: CanvasRenderingContext2D, h: Head, amount: number, len: number, by: number) {
   const g = ctx.createRadialGradient(0, 0, 0, 0, 0, len);
   g.addColorStop(0, tone(h.blush ? h.centre : h.ink, amount, by + lightStrength()));
@@ -14,24 +11,24 @@ function petalFill(ctx: CanvasRenderingContext2D, h: Head, amount: number, len: 
   return g;
 }
 
-/** Flat, open flowers: cosmos, daisies and pointed lily-like blooms, as a disc tilted toward you. */
+/** Flat open flowers (cosmos, daisies, lilies) drawn as a tilted disc. */
 export function paintDisc(ctx: CanvasRenderingContext2D, s: Stem, h: Head, t: number) {
   const R = h.radius;
   // A tilted flower sits up off the end of the stem.
   ctx.translate(0, -R * (0.12 + 0.3 * (1 - h.face)));
-  // Flattened toward the stem, and slanted when the head is turned about it (see headFrame).
+  // The petal plane tilted by `face` and turned `turn` about the stem: `headFrame`'s u, v on screen.
   const [a, c, d] = [Math.cos(h.turn), Math.sqrt(1 - h.face * h.face) * Math.sin(h.turn), h.face];
   ctx.transform(a, 0, c, d, 0, 0);
   const n = h.petals;
   for (let k = 0; k < n; k++) {
     if (h.lost.has(k)) continue;
-    // Lilies have an outer ring of three and an inner ring of three, drawn on top and a little shorter.
+    // Lilies: an outer ring of three, then an inner three between them, on top and shorter.
     const lily = h.kind === "lily";
     const ring = lily ? Math.floor((k * 2) / n) : 0;
     const slot = lily ? (k % (n / 2)) * 2 + ring : k;
     const phi = h.spin + ((slot + h.drift[k]) / n) * TAU;
     const len = R * h.jitter[k] * (ring ? 0.82 : 1) * (1 + 0.025 * Math.sin(t * 1.6 + k * 1.9 + s.id));
-    // Petals on the far side of a tilted flower print a little lighter.
+    // Far-side petals of a tilted flower print a little lighter.
     const amount = h.tone * (0.92 + 0.08 * Math.sin(phi)) * (0.94 + 0.06 * h.jitter[k]) * (ring ? 1.06 : 1);
     ctx.save();
     ctx.rotate(phi);
@@ -44,7 +41,6 @@ export function paintDisc(ctx: CanvasRenderingContext2D, s: Stem, h: Head, t: nu
       ctx.quadraticCurveTo(len + half * 0.4, 0, len - half, half);
       ctx.lineTo(r0, half * 0.7);
     } else if (lily) {
-      // Long, pointed petals.
       const half = R * 0.24;
       ctx.moveTo(R * 0.04, 0);
       ctx.quadraticCurveTo(len * 0.42, -half * 1.9, len, 0);
@@ -61,7 +57,7 @@ export function paintDisc(ctx: CanvasRenderingContext2D, s: Stem, h: Head, t: nu
       ctx.bezierCurveTo(len - span * 0.2, half * 1.05, r0 + span * 0.3, half * 0.9, r0, 0);
     }
     ctx.closePath();
-    // Lit by which way the petal points on screen, so the flower is lighter on the side toward the light.
+    // Lit by the petal's on-screen direction, so the side toward the light is lighter.
     const by = litBy(a * Math.cos(phi) + c * Math.sin(phi), d * Math.sin(phi));
     ctx.fillStyle = petalFill(ctx, h, amount, len, by);
     ctx.fill();

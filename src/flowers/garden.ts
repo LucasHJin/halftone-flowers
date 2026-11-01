@@ -1,12 +1,7 @@
 /**
- * A mixed bed of flowers and grass: a tall bouquet rooted in the bottom-left
- * corner reaching up and to the right, and a low meadow trailing off along the
- * bottom. Each stem sways on a damped spring driven by the wind, so tall stems
- * lag and overshoot a little while short ones follow closely. The pointer stirs
- * up its own breeze through the same springs, so brushed flowers lean away and
- * drift back as unhurriedly as everything else. A click or tap on a flower
- * nods it the same way and shakes a petal loose; on a butterfly or bee, it
- * sends up a heart.
+ * The bed: a tall bouquet rooted in the bottom-left corner reaching up and
+ * right, a low meadow along the bottom, and grass. Each stem sways on a damped
+ * spring driven by the wind plus the pointer's breeze.
  */
 import { clamp, createRandom, lerp, TAU } from "../utils/math.js";
 import type { FlowerSettings, Mix } from "./settings.js";
@@ -19,21 +14,21 @@ import { createStem, curvedStem, poseStem, SEGMENTS } from "./stem.js";
 import type { Head, Ink, Kind, Leaf, LeafShape, Plant, Stem } from "./types.js";
 import { createWind, type Wind } from "./wind.js";
 
-/** How far along the meadow, as a share of its span, extra stems start growing in toward its thinner right end. */
+/** Share of the way along the meadow where `meadow.thicken`'s extra stems start. */
 const THICKER_FROM = 0.3;
 
-/** How hard a click or tap nudges a flower: as hard as brushing this many px across it. */
+/** A click or tap nudges a flower as hard as brushing this many px across it. */
 const TAP = 12;
 
 export interface GardenLayout {
   width: number;
   height: number;
-  /** Diamond width; thin parts are kept at least about half a diamond wide so they read. */
+  /** Diamond width, px; thin parts are kept at least about half of it wide so they print. */
   cell: number;
   seed: number;
   /** Multiplier on the number of stems. */
   density: number;
-  /** Grow the plants in rather than have them there from the start. */
+  /** Grow the plants in; false has them there from the start. */
   spawn: boolean;
 }
 
@@ -44,11 +39,10 @@ export class Garden {
   height = 0;
   /** Multiplier on how far the wind bends things. */
   wind = 1;
-  /** The timings of the bed growing in, while it is. */
+  /** Grow-in timings while the bed grows in, else null. */
   spawnPlan: SpawnPlan | null = null;
-  /** Butterflies and bees visiting. */
   insects: Insects;
-  /** Petals shaken loose, blowing away. */
+  /** Loose petals blowing away. */
   petals: Petals;
   /** Base flower size, px. */
   bloom = 40;
@@ -58,9 +52,9 @@ export class Garden {
   private nextId = 0;
   private rand: () => number = Math.random;
   private stemWidth = 3;
-  /** Radius around the pointer that presses on stems. */
+  /** Radius around the pointer that presses on stems, px. */
   private hand = 30;
-  /** Where the pointer is, where it was at the last step, and its smoothed velocity. */
+  /** `lastX`/`lastY` are where it was at the last step; `vx`/`vy` are smoothed, px/s. */
   private pointer = { x: 0, y: 0, lastX: 0, lastY: 0, vx: 0, vy: 0, live: false };
   private spawnFrom: number | null = null;
   /** Which plant shows where, for telling which flower a click is on. */
@@ -72,7 +66,7 @@ export class Garden {
     this.petals = new Petals(this);
   }
 
-  /** Wind, sway, shade and the pointer follow new settings straight away; the rest waits for the next layout. */
+  /** `layout`, `species`, `mix`, `tone` and `spawn` wait for the next `layout()`; the rest applies straight away. */
   configure(settings: FlowerSettings) {
     this.settings = settings;
     this.windAt = createWind(settings.wind);
@@ -95,7 +89,7 @@ export class Garden {
     // Counts depend on width only, so a phone's URL bar resizing the height doesn't reshuffle the bed.
     const count = Math.round(clamp(W / stems.spacing, stems.min, stems.max) * density);
 
-    // The bouquet: heads land inside a quarter-ellipse from the corner, densest near it.
+    // Bouquet: heads land in a quarter-ellipse from the corner, densest near it.
     const reachX = W * bouquet.reach[0];
     const reachY = H * bouquet.reach[1];
     const tallKinds = odds(mix.bouquet);
@@ -110,7 +104,7 @@ export class Garden {
       this.plant(this.pick(tallKinds), rootX, H + this.between(8, 40), headX, headY, depth, 1, reach > 0.5);
     }
 
-    // The meadow: each stem somewhere near its own share of the span, shorter the further right it goes.
+    // Meadow: each stem near its own share of the span, shorter further right.
     const low = Math.round(count * meadow.amount);
     const shortKinds = odds(mix.meadow);
     for (let i = 0; shortKinds.length && i < low; i++) {
@@ -122,7 +116,7 @@ export class Garden {
       this.plant(this.pick(shortKinds), rootX, H + this.between(5, 25), headX, H - tall, depth, lerp(0.85, 0.6, along), false);
     }
 
-    // Grass arching out of the corner, then in tufts of three fanning out, spread along the bottom like the meadow.
+    // Grass: blades arching out of the corner, then tufts of three spread along the bottom like the meadow.
     const corner = Math.round(count * grass.corner);
     const bottom = Math.round(count * grass.bottom);
     const tufts = Math.ceil(bottom / 3);
@@ -145,13 +139,12 @@ export class Garden {
       this.plants.push({ depth, stems: [blade], spawn: null });
     }
 
-    // More of the meadow toward its right end, where it's shortest and smallest, so it doesn't thin out into an even row: none extra
-    // from THICKER_FROM along, rising to `thicken` times as many again at the end. Last from the seed, so changing how many doesn't
-    // reshuffle the rest of the bed.
+    // Extra meadow stems toward its short right end, so it doesn't thin out into an even row. Drawn last from the seed,
+    // so changing `thicken` doesn't reshuffle the rest of the bed.
     const extra = shortKinds.length ? Math.round(low * meadow.thicken * (1 - THICKER_FROM) / 2) : 0;
     for (let i = 0; i < extra; i++) {
       const depth = rand();
-      // Each near its own share of the stretch, the shares narrowing as it thickens.
+      // Each near its own share of the stretch; `Math.sqrt` narrows the shares so density rises linearly toward the end.
       const along = lerp(THICKER_FROM, 1, Math.sqrt(clamp((i + 0.5 + (rand() - 0.5) * meadow.scatter) / extra, 0, 1)));
       const rootX = W * lerp(meadow.span[0], meadow.span[1], along);
       // Mostly a little under the meadow's height where it stands, now and then well over it.
@@ -161,7 +154,7 @@ export class Garden {
     }
 
     this.plants.sort((a, b) => a.depth - b.depth);
-    // Start from a settled bed rather than every stem springing at once.
+    // Start each stem bent to the wind at its tip, so they don't all spring at once.
     for (const p of this.plants) {
       for (const s of p.stems) {
         poseStem(s);
@@ -172,7 +165,7 @@ export class Garden {
     this.spawnFrom = null;
     this.spawnPlan = spawn ? planSpawn(this.plants, W, H, seed, this.settings.spawn) : null;
     if (spawn) this.spawnFrom = this.time;
-    // They'd be sitting on flowers that are gone, or blowing across a bed that is.
+    // Insects and loose petals belong to the old bed.
     this.insects.reset();
     this.petals.reset();
   }
@@ -182,7 +175,7 @@ export class Garden {
     return this.spawnFrom === null ? null : this.time - this.spawnFrom;
   }
 
-  /** Shows every plant fully grown straight away. */
+  /** Shows every plant fully grown now. */
   endSpawn() {
     this.spawnFrom = null;
     this.spawnPlan = null;
@@ -196,7 +189,7 @@ export class Garden {
     let vx = 0;
     let vy = 0;
     if (p.live) {
-      // Smoothed over a few steps, since pointer events and steps don't line up one to one.
+      // Smoothed over ~50 ms, since pointer events and steps don't line up one to one.
       const k = 1 - Math.exp(-dt / 0.05);
       p.vx += ((p.x - p.lastX) / dt - p.vx) * k;
       p.vy += ((p.y - p.lastY) / dt - p.vy) * k;
@@ -232,18 +225,16 @@ export class Garden {
     this.petals.step(dt);
   }
 
-  /** How hard the wind blows at (x, y) now, in the same units as its settings, times the wind multiplier. */
+  /** Wind at (x, y) now, in `WindSettings` units, times `wind`. */
   windNow(x: number, y: number) {
     return this.wind * this.windAt(x, y, this.time);
   }
 
   /**
-   * A click or tap at (x, y). An insect it's on, that no nearer plant hides
-   * there, sends up a heart. Otherwise the flower it's on nods as if brushed
-   * and shakes a petal loose: the one that shows there, or failing that, where
-   * another plant's stem or leaf crosses it, the one it's furthest inside or
-   * closest to, within half the pointer's reach. Anywhere else, tiny petals
-   * puff out from it.
+   * A click or tap at (x, y). An insect there that no nearer plant hides sends
+   * up a heart. Otherwise the head showing there, else the one it's furthest
+   * inside or nearest within `hand / 2`, nods and sheds a petal. Anywhere else,
+   * tiny petals puff out.
    */
   tap(x: number, y: number) {
     if (this.growing !== null) return;
@@ -274,7 +265,7 @@ export class Garden {
     this.petals.shed(plant, s, x, y);
   }
 
-  /** The pointer moved to (x, y). Stems it passes through lean the way it's going, then drift back. */
+  /** The pointer moved to (x, y). Stems it passes through lean its way, then drift back. */
   movePointer(x: number, y: number) {
     const p = this.pointer;
     if (!p.live) Object.assign(p, { lastX: x, lastY: y, vx: 0, vy: 0, live: true });
@@ -282,20 +273,17 @@ export class Garden {
     p.y = y;
   }
 
-  /** Forgets the pointer, so when it next appears somewhere else it doesn't sweep across the bed to get there. */
+  /** Forgets the pointer, so its next position isn't read as a sweep across the bed. */
   releasePointer() {
     this.pointer.live = false;
   }
 
-  /**
-   * Adds wind to a stem the pointer is passing through, the way it's moving and
-   * most where it meets the head, and a little to stems further off.
-   */
+  /** Adds wind to a stem the pointer passes through, its way and most near the head, and a little to stems further off. */
   private brush(s: Stem, vx: number, vy: number, dt: number) {
     const { x, y } = this.pointer;
     const hand = this.hand;
     const h = s.head;
-    // Spikes and plumes carry their flowers along the top of the stem, which is that much wider to catch.
+    // Spikes and plumes carry florets along the top of the stem, so that stretch is wider to catch.
     const florets = h && (h.kind === "spike" || h.kind === "plume") ? h : null;
     const from = florets ? SEGMENTS * (1 - florets.reach) : SEGMENTS;
     let grip = 0;
@@ -323,14 +311,14 @@ export class Garden {
       }
     }
     if (grip < 1e-3) return;
-    // Only movement across the stem pushes it; how far, not how fast, so a flick is no rougher than a sweep.
+    // Only movement across the stem pushes it, by distance (`* dt`), so a flick is no rougher than a sweep.
     const a = s.angle[at];
     const across = (vx * Math.cos(a) + vy * Math.sin(a)) * dt;
     const { strength, limit } = this.settings.cursor;
     s.gust = limit * Math.tanh((s.gust + strength * this.catches(s) * grip * across) / limit);
   }
 
-  /** Short stems barely sway in the wind, so they catch more of the pointer's to visibly answer it. */
+  /** Short stems barely sway in the wind, so they catch more of the pointer's to visibly respond. */
   private catches(s: Stem) {
     return Math.sqrt((this.bloom * 8) / (s.segment * SEGMENTS));
   }
@@ -406,7 +394,7 @@ export class Garden {
     const [wm, wd, ww] = sp.inks;
     const r = this.rand() * (wm + wd + ww);
     const ink: Ink = r < wm ? 0 : r < wm + wd ? 1 : 2;
-    // Centres contrast with the petals: dark on pink, white on dark poppies, pink or dark on white.
+    // Centres contrast with the petals: dark on main, main on dark (white on dark poppies), main or dark on white.
     let centre: Ink = ink === 0 ? 1 : ink === 1 ? (kind === "poppy" ? 2 : 0) : this.rand() < 0.6 ? 0 : 1;
     // Many daffodils have a trumpet the same colour as their petals.
     if (kind === "daffodil" && this.rand() < 0.35) centre = ink;
@@ -417,7 +405,7 @@ export class Garden {
     else if (kind === "lily" || kind === "turksCap" || kind === "daffodil" || kind === "iris") petals = 6;
     else if (kind === "poppy") petals = 4;
     else if (kind === "tulip") petals = 3;
-    // One per petal in paintGlobe's rings.
+    // Must match the petal count of paintGlobe's rings.
     else if (kind === "peony") petals = 28;
     else if (kind === "cluster") {
       petals = 5 + Math.floor(this.rand() * 5);
@@ -436,7 +424,7 @@ export class Garden {
       ink,
       centre,
       blush: ink === 2 && this.rand() < 0.5,
-      // Nearer flowers print darker, so the bed has depth. Plumes stay soft.
+      // Plumes print softer.
       tone: lerp(tone[0], tone[1], depth) * (kind === "plume" ? 0.7 : 1),
       jitter: Array.from({ length: Math.max(petals, 1) }, () => this.between(1 - sp.ragged, 1 + sp.ragged * 0.7)),
       drift: Array.from({ length: Math.max(petals, 1) }, () => this.between(-1, 1) * sp.drift),
@@ -457,7 +445,7 @@ export class Garden {
     // Half of buds nod, hooked over like a poppy's.
     else if (kind === "bud" && this.rand() < 0.5) hook = this.between(1.6, 2.4);
     if (!hook) return;
-    // Most hook over with the wind, some back against it.
+    // 30% hook back against the wind.
     if (this.rand() < 0.3) hook = -hook;
     for (let k = SEGMENTS - 5; k < SEGMENTS; k++) s.rest[k] += hook * Math.pow((k - SEGMENTS + 6) / 5, 1.5);
   }
@@ -478,7 +466,7 @@ export class Garden {
   }
 }
 
-/** How firmly a pointer `d` px from a stem presses on it: fully within the hand, then a faint stir of air. */
+/** How firmly a pointer `d` px from a stem presses on it: strongly within `hand`, plus a faint stir of air out to `3 * hand`. */
 function pressure(d: number, hand: number) {
   const touch = d < hand ? (1 - Math.max(d, 0) / hand) ** 2 : 0;
   const air = d < hand * 3 ? 0.1 * (1 - Math.max(d, 0) / (hand * 3)) ** 2 : 0;

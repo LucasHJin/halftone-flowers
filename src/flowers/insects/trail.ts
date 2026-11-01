@@ -1,7 +1,6 @@
 /**
- * The faint line an insect leaves behind it, fading from its newest end. Each
- * point keeps the depth the insect was at, so where it flew behind a plant,
- * its trail stays behind it too.
+ * An insect's trail, fading from its oldest end. Each point keeps the depth the
+ * insect had there, so the trail passes behind the same plants it did.
  */
 import type { TrailSettings } from "../settings.js";
 import { inAccent, inShade, tone } from "../paint/tone.js";
@@ -25,7 +24,7 @@ export interface Trail {
 /** Px an insect moves before its trail gets another point. */
 const SPACING = 2;
 
-/** Adds the point (x, y) at depth z, if it's far enough from the last one. */
+/** Adds (x, y, z) at time `t`, unless within `SPACING` px of the last point. */
 export function extend(trail: Trail, x: number, y: number, z: number, t: number) {
   const last = trail.points[trail.points.length - 1];
   if (last && Math.hypot(x - last.x, y - last.y) < SPACING) return;
@@ -48,11 +47,9 @@ export function paintSegment(ctx: CanvasRenderingContext2D, trail: Trail, i: num
 }
 
 /**
- * Strokes one piece of a trail from (ax, ay) to (bx, by), `fresh` from 1 new
- * to 0 gone: as strong and wide as the settings say when new, fainter and
- * narrower as it fades, and moved `shade` along the ramp. It's laid over
- * what's below, so a fading trail thins out rather than cutting into the
- * plants it crosses.
+ * Strokes a trail piece, `fresh` from 1 (new: full `strength` and `width`) to 0
+ * (gone), moved `shade` along the ramp. Fades by alpha so a fading trail thins
+ * over the plants it crosses without cutting into them.
  */
 export function strokeSegment(ctx: CanvasRenderingContext2D, ax: number, ay: number, bx: number, by: number, fresh: number, settings: TrailSettings, shade = 0) {
   if (fresh <= 0) return;

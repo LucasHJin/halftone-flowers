@@ -1,5 +1,5 @@
 :root {
-  /* Same as the flower field's default background, so nothing flashes before its first frame. */
+  /* The field's default background, so nothing flashes before its first frame. */
   --page: #f5f8fd;
 }
 

@@ -2,7 +2,7 @@ import { TAU } from "../../../utils/math.js";
 import type { Head, Stem } from "../../types.js";
 import { litBy, tone } from "../tone.js";
 
-/** One floret of a cluster: where it sits, its size as a share of a whole floret, and where its stalk leaves from, in the head's frame. */
+/** A cluster floret in the head's frame: `size` is a share of a full floret, `fromX`, `fromY` where its stalk starts. */
 export interface Floret {
   x: number;
   y: number;
@@ -11,7 +11,7 @@ export interface Floret {
   fromY: number;
 }
 
-/** A cluster's florets at time `t`, in the order they're drawn: each stalk's, then the forks off it. */
+/** A cluster's florets at time `t`, indexed as `h.lost` keys: each stalk's, then the forks off it. */
 export function florets(s: Stem, h: Head, t: number) {
   const R = h.radius;
   const n = h.petals;
@@ -32,7 +32,7 @@ export function florets(s: Stem, h: Head, t: number) {
   return out;
 }
 
-/** A spray of tiny flowers on thin stalks fanning out from the top of the stem. Stalks stay once their florets are shaken off. */
+/** A spray of tiny florets on thin stalks. Stalks stay after their florets are shaken off. */
 export function paintCluster(ctx: CanvasRenderingContext2D, s: Stem, h: Head, t: number) {
   const R = h.radius;
   const all = florets(s, h, t);
@@ -48,7 +48,7 @@ export function paintCluster(ctx: CanvasRenderingContext2D, s: Stem, h: Head, t:
   ctx.stroke();
   all.forEach((f, i) => {
     if (h.lost.has(i)) return;
-    // Florets on the side of the spray toward the light print lighter.
+    // Lit by direction from the spray's middle, R / 2 out from the stem tip.
     ctx.fillStyle = tone(h.ink, h.tone, litBy(f.x, f.y + R * 0.5));
     ctx.beginPath();
     ctx.arc(f.x, f.y, R * 0.2 * f.size, 0, TAU);

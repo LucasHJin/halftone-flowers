@@ -1,8 +1,3 @@
-/**
- * What butterflies and bees share: their state, how they fly toward a goal
- * along a wandering path in 3D, how their bodies turn and bank as they go,
- * and where on a flower they settle.
- */
 import { clamp, lerp, TAU } from "../../utils/math.js";
 import { along } from "../paint/tone.js";
 import { SEGMENTS } from "../stem.js";
@@ -17,10 +12,9 @@ export type Phase = "flying" | "hovering" | "alighting" | "landed" | "leaving";
 /** How many of an insect's sizes it flies to cross the bed from back to front. */
 export const DEPTH = 5;
 
-/** How far an insect reaches out from its middle, as a share of its size: it's over a flower's head once it's this close to it. */
+/** An insect's radius as a share of its size; within this of a flower's head, it's over it. */
 export const REACH = 0.5;
 
-/** One flower head on a plant. */
 export interface Flower {
   plant: Plant;
   stem: Stem;
@@ -28,19 +22,19 @@ export interface Flower {
 
 export interface Insect {
   kind: InsectKind;
-  /** Which of its kind's species it is, an index into its kind's `species`. */
+  /** Index into its group's `species`. */
   species: number;
   /** Px: about its body length. */
   size: number;
   x: number;
   y: number;
-  /** Depth among the plants, from 0 at the back to 1 at the front. It's painted over plants further back. */
+  /** Depth among the plants, from 0 at the back to 1 at the front. */
   z: number;
-  /** Px a second across and down the screen, and toward the viewer. */
+  /** Px a second right, down, and toward the viewer. */
   vx: number;
   vy: number;
   vz: number;
-  /** How hard it's speeding up, px a second squared, the same ways. */
+  /** Acceleration, px a second squared, the same ways. */
   ax: number;
   ay: number;
   az: number;
@@ -50,55 +44,55 @@ export interface Insect {
   /** The flower it's flying to or sitting on. */
   plant: Plant | null;
   stem: Stem | null;
-  /** The flower it last sat on or hovered by, until it's well clear of it. */
+  /** The flower it last left, until it's 2 sizes clear of its head. */
   last: Flower | null;
   /** Which side of the flower it hovers: -1 left, 1 right. */
   side: number;
-  /** Whether it hovers by the flower it's flying to before deciding to settle, or settles straight away. */
+  /** Whether it hovers by its next flower before deciding to settle. */
   hovers: boolean;
-  /** The angle of the flower head it sits on, radians clockwise from up. */
+  /** Angle of the head it sits on, radians clockwise from up. */
   lean: number;
   /** Seconds left hovering or sitting. */
   timer: number;
   /** Flowers left to visit after the one it's on its way to. */
   visits: number;
-  /** Where it heads once it's done, well off screen. */
+  /** Off-screen point it leaves toward. */
   exitX: number;
   exitY: number;
   /** Seconds since it arrived. */
   age: number;
-  /** Phases of its wandering, and how fast it wanders, so no two fly alike. */
+  /** Three random phases, radians, and a multiplier on its wander rate. */
   wobble: [number, number, number, number];
   quirks: Quirks;
   /** 1 in flight, 0 sitting, easing between. */
   air: number;
-  /** Wing beat, radians. */
+  /** Wing-beat phase, radians. */
   flap: number;
   /** Wing angle above level, radians. */
   wing: number;
-  /** Drawn offset from `y`, bobbing with the wing beat. */
+  /** Drawn offset from `y`, px, as it bobs in flight. */
   bob: number;
   /** Which way it faces, radians from facing right toward facing the viewer. */
   yaw: number;
-  /** The way it faces once settled on a flower. */
+  /** `yaw` it settles to on a flower. */
   rest: number;
   /** Nose up, radians. */
   pitch: number;
   /** Banked right side down, radians. */
   roll: number;
-  /** Turned in the screen, radians clockwise: the lean of the flower it sits on. */
+  /** Screen rotation, radians clockwise; follows part of its flower's lean while perched. */
   tilt: number;
   trail: Trail;
 }
 
-/** How one insect differs from others of its kind, so no two look or fly alike. */
+/** Per-insect variation on its kind. */
 export interface Quirks {
-  /** Multiple of its kind's flying speed, quickness and wing beat, its species' and its own. */
+  /** Multiple of its kind's speed, acceleration, turn rate and wing beat; its species' times its own. */
   pace: number;
-  /** Radians more nose up, and more banked right side down, than its flight alone holds it. */
+  /** Radians added to its flight's pitch (nose up) and roll (right side down). */
   pitch: number;
   roll: number;
-  /** Radians more turned toward the viewer than the way it's going, or away if negative. */
+  /** Radians turned toward the viewer from its heading; negative turns away. */
   turn: number;
   /** How far the viewer looks down on it, radians. */
   view: number;
@@ -111,60 +105,58 @@ export function randomQuirks(): Quirks {
   return { pace: pick(0.7, 1.4), pitch: pick(-0.2, 0.2), roll: pick(-0.15, 0.15), turn: pick(-0.7, 0.7), view: pick(0.1, 0.55), stroke: pick(0.8, 1.15) };
 }
 
-/** How a kind flies. Distances are in multiples of its size. */
+/** Distances are in multiples of the insect's size. */
 export interface FlightStyle {
   /** Cruising speed, sizes a second. */
   cruise: number;
-  /** Seconds to take up a new velocity, when it can speed up hard enough. */
+  /** Seconds to reach a new velocity, if `accel` allows. */
   agility: number;
-  /** Hardest it can speed up, slow down or swing round, sizes a second squared. */
+  /** Max acceleration in any direction, sizes a second squared. */
   accel: number;
   /** Fastest its body turns, radians a second. */
   turn: number;
-  /** How far it banks into its tightest turns, radians. */
+  /** Max bank into turns, radians. */
   bank: number;
-  /** How far its heading strays either way from straight at its goal, radians. */
+  /** Max heading stray either side of its goal, radians. */
   wander: number;
-  /** How often its heading strays, cycles a second. */
+  /** Wander frequency, cycles a second. */
   wanderRate: number;
   /** Steepest it flies down while well off its goal, radians below level. */
   dive: number;
   /** Quick flicker on top of the wandering, radians. */
   flutter: number;
-  /** Of the flowers it visits, the share it hovers by before deciding; it settles straight onto the rest. */
+  /** Share of visits where it hovers before deciding; otherwise it lands directly. */
   hovers: number;
-  /** Seconds it hovers by a flower, picked from this range. */
+  /** Range of seconds it hovers by a flower. */
   hover: [number, number];
   /** How far it drifts about while hovering, sizes. */
   drift: number;
-  /** Of the flowers it hovers by, the share it moves on from without settling. */
+  /** Share of hovers it leaves without settling. */
   skip: number;
-  /** How far it turns about while sitting on a flower, radians. */
+  /** Radians it turns back and forth while perched. */
   crawl: number;
   /** Odds of visiting each kind of flower; kinds left out are never visited. */
   likes: Partial<Record<Kind, number>>;
 }
 
-/** One species of a kind, against the others of its kind. */
 export interface Species {
   name: string;
   /** Multiple of its kind's size. */
   size: number;
-  /** Multiple of its kind's flying speed and quickness. */
+  /** Multiplied into each insect's `quirks.pace`. */
   pace: number;
-  /** Multiple of how often its heading strays: higher jinks about more. */
+  /** Multiple of its kind's `wanderRate`. */
   weave: number;
-  /** Odds of one coming, against the others of its kind. */
+  /** Relative odds against the other species of its kind. */
   odds: number;
 }
 
-/** What every insect of one kind shares, whatever its species. */
 export interface InsectGroup {
   /** Multiple of the base flower size. */
   size: number;
   species: readonly Species[];
   flight: FlightStyle;
-  /** Moves its wings, bob and pitch on by `dt` seconds; `rate` multiplies the wing beat. */
+  /** Advances `air`, wings, bob, pitch and tilt by `dt` seconds; `rate` scales the wing beat. */
   animate(b: Insect, dt: number, rate: number): void;
   /** Paints it in the tone image, centred on the origin, `s` px to its size. */
   paint(ctx: CanvasRenderingContext2D, b: Insect, s: number): void;
@@ -183,7 +175,7 @@ const MIDDLE: Partial<Record<Kind, number>> = {
   bud: 0.6,
 };
 
-/** Where an insect sits on a flower as it is posed now, and the head's angle, radians clockwise from up. */
+/** Perch point on the head of `s` as currently posed, and the head's angle, radians clockwise from up. */
 export function perch(s: Stem) {
   const h = s.head!;
   if (h.kind === "spike" || h.kind === "plume") {
@@ -196,11 +188,11 @@ export function perch(s: Stem) {
   return { x: s.x[SEGMENTS] + Math.sin(angle) * out, y: s.y[SEGMENTS] - Math.cos(angle) * out, angle };
 }
 
-/** How far (x, y) is outside the head on `s` as it's posed now, px; negative over it. */
+/** Px from (x, y) to the edge of the head on `s` as currently posed; negative inside it. */
 export function clearOf(s: Stem, x: number, y: number) {
   const h = s.head!;
   if (h.kind === "spike" || h.kind === "plume") {
-    // Florets or hairs all along the top of the stem, the lowest spike florets reaching out furthest.
+    // Florets or hairs line the stem's top `reach`; the lowest spike florets reach out furthest.
     let d = Infinity;
     for (let k = Math.floor(SEGMENTS * (1 - h.reach)); k < SEGMENTS; k++) {
       const ax = s.x[k];
@@ -216,7 +208,7 @@ export function clearOf(s: Stem, x: number, y: number) {
   return Math.hypot(x - p.x, y - p.y) - h.radius * 1.1;
 }
 
-/** A point `margin` px clear of the head on `s`, straight out from its middle the way (dx, dy) points, or toward `side` if that's nowhere. */
+/** First point `margin` px clear of the head on `s`, out from its middle along (dx, dy), or along x toward `side` if that's under 1 px. */
 export function beside(s: Stem, dx: number, dy: number, margin: number, side: number): [number, number] {
   const p = perch(s);
   const d = Math.hypot(dx, dy);
@@ -228,12 +220,9 @@ export function beside(s: Stem, dx: number, dy: number, margin: number, side: nu
 }
 
 /**
- * Flies toward (gx, gy) at depth gz at up to `speed` px a second, slowing
- * within `slow` sizes of it. Far off, its heading strays to either side, so
- * into and out of the screen, and up and down, and a goal far below it comes
- * down to in a sweeping curve, no steeper than its style's dive. It speeds up,
- * slows and turns no harder than its style allows, so it swings round in
- * curves. Returns the distance to the goal before moving, px.
+ * Flies toward (gx, gy) at depth gz at up to `speed` px a second, slowing within
+ * `slow` sizes, accelerating at most `style.accel`. Far off, its heading wanders;
+ * a goal steeply below is reached in a curve. Returns px to the goal before moving.
  */
 export function steer(b: Insect, style: FlightStyle, gx: number, gy: number, gz: number, speed: number, dt: number, slow = 2.5) {
   const depth = b.size * DEPTH;
@@ -244,7 +233,8 @@ export function steer(b: Insect, style: FlightStyle, gx: number, gy: number, gz:
   const [p1, p2, p3, rate] = b.wobble;
   const t = b.age * style.wanderRate * rate * TAU;
   const far = clamp(dist / (b.size * 4) - 0.25, 0, 1);
-  // Too steeply below, it heads round the goal as well as toward it, the more the steeper, coming down at the steepest it may; it can drop onto it only from within half its size.
+  // Goal below steeper than `limit`: descend at `limit`, heading partly round the goal, more the steeper.
+  // `limit` is vertical within 0.5 sizes of the goal and `style.dive` beyond 1.5.
   const flat = Math.hypot(dx, dz);
   const steep = Math.atan2(dy, flat);
   const limit = lerp(Math.PI / 2, style.dive, clamp(dist / b.size - 0.5, 0, 1));
@@ -288,7 +278,6 @@ export function steer(b: Insect, style: FlightStyle, gx: number, gy: number, gz:
   b.x += b.vx * dt;
   b.y += b.vy * dt;
   b.z += (b.vz / depth) * dt;
-  // Not far beyond the bed's back or front.
   if (b.z < -0.15 || b.z > 1.2) {
     b.z = clamp(b.z, -0.15, 1.2);
     b.vz = 0;
@@ -297,10 +286,9 @@ export function steer(b: Insect, style: FlightStyle, gx: number, gy: number, gz:
 }
 
 /**
- * Turns its body toward the way it's flying, or toward `face` (px across the
- * screen and toward the viewer) if given, or about its resting way on a
- * flower; never faster than its style allows, so it swings round through
- * facing the viewer or away. Banks into turns.
+ * Turns `yaw` toward `rest` when landed, else `face` (px across and toward the
+ * viewer), else its heading, at most `style.turn` radians a second, so it swings
+ * through facing the viewer or away. Banks with sideways acceleration.
  */
 export function orient(b: Insect, style: FlightStyle, dt: number, face?: [number, number]) {
   let want = b.yaw;

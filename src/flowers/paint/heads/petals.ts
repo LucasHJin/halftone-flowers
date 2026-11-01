@@ -1,7 +1,6 @@
 /**
- * Petals modelled in 3D and flattened onto the canvas, for heads whose petals
- * curl too far out of one plane to draw as a tilted disc. Points are in the
- * head's local frame: x right, y toward the stem, z toward the viewer.
+ * 3D petals projected onto the canvas, for heads that curl too far out of one
+ * plane to draw as a tilted disc. Head frame: x right, y toward the stem, z toward the viewer.
  */
 
 export type Vec = [number, number, number];
@@ -14,9 +13,9 @@ export interface Frame {
 }
 
 /**
- * The frame of a head that faces `face` of the way toward the viewer (1 faces
- * you, 0 points along the stem), turned `turn` radians about the stem. At turn
- * 0 its petal plane flattens the same way as paintDisc's.
+ * Frame of a head facing `face` of the way toward you (1 faces you, 0 points
+ * along the stem), turned `turn` radians about the stem. `u`, `v` project to
+ * the same screen axes as `paintDisc`'s transform.
  */
 export function headFrame(face: number, turn: number): Frame {
   const s = face;
@@ -47,9 +46,9 @@ export interface PetalShape {
   heading: number;
   /** How far the petal turns by its tip, radians: positive curls in over the face, negative curls back. */
   bend: number;
-  /** Above 1 saves the turning for near the tip. */
+  /** Exponent on `bend`; above 1 saves the turning for near the tip. */
   curl?: number;
-  /** How quickly it widens from the base and narrows to the tip: low is blunt, 1 is pointed. */
+  /** Exponents for widening from the base and narrowing to the tip: low is blunt, 1 is pointed. */
   taper: [number, number];
   /** How far its edges lift toward its inner face, as a share of the half-width, so it has body seen edge-on. */
   cup: number;
@@ -62,7 +61,7 @@ export interface Petal {
   z: number;
   /** The midrib from base to tip, as x, y pairs. */
   rib: number[];
-  /** Halfway along, which way the side of the petal you see faces. */
+  /** Normal of the side you see, halfway along. */
   normal: Vec;
 }
 
@@ -123,7 +122,7 @@ export function ring(f: Frame, a: number, r: number, n = 20) {
   return out;
 }
 
-/** A solid of revolution around the axis, such as a trumpet: `profile` lists [px along the axis, radius] from one end to the other. */
+/** Outline of a solid of revolution round the axis: `profile` is [px along the axis, radius] from end to end. */
 export function tube(f: Frame, profile: [number, number][]) {
   const path = new Path2D();
   let prev = ring(f, ...profile[0]);
@@ -135,7 +134,6 @@ export function tube(f: Frame, profile: [number, number][]) {
   return path;
 }
 
-/** Adds the closed outline through x, y pairs to `path`. */
 export function polygon(path: Path2D, pts: number[]) {
   path.moveTo(pts[0], pts[1]);
   for (let i = 2; i < pts.length; i += 2) path.lineTo(pts[i], pts[i + 1]);
@@ -167,7 +165,7 @@ export interface Part {
   paint: () => void;
 }
 
-/** Paints parts from the furthest back to the nearest. */
+/** Paints `parts` back to front. */
 export function paintInDepth(parts: Part[]) {
   parts.sort((a, b) => a.z - b.z);
   for (const part of parts) part.paint();

@@ -1,29 +1,26 @@
 /**
- * The trail the pointer leaves on the field: a few strands, each printed like
- * a bee's or butterfly's trail, that ease after the pointer along one smoothed
- * path. Close behind it they run together; further back they spread apart and
- * weave round each other in waves that keep running along them, like wisps of
- * wind, each strand fading in and out along its length. They stay a moment,
- * then thin and fade from the old end. It's painted in front of everything.
+ * The pointer's trail: a few strands, stroked like the insects' trails, along
+ * one path that eases after the pointer. Close together right behind it, they spread
+ * apart and weave round each other as they age, each fading in and out along
+ * its length, and thin out from the old end once `hold` is up.
  */
 import { clamp, lerp, TAU } from "../utils/math.js";
 import { smoothstep } from "./insects/insect.js";
 import { strokeSegment } from "./insects/trail.js";
 import type { FlowerSettings } from "./settings.js";
 
-/** Px the trail's head moves before it lays down another point. */
+/** Px the head moves between path points. */
 const SPACING = 2.5;
 
-/** How far apart the strands are right behind the pointer, as a share of how far they spread. */
+/** Strands' spread right behind the pointer, as a share of their full spread. */
 const TIGHT = 0.12;
 
 /** Seconds the strands take to spread about two thirds of the way apart. */
 const OPEN = 0.15;
 
-/** Px along the trail over which each strand fades out and back in, roughly. */
+/** Wavelength, px along the trail, of each strand fading out and back in. */
 const WISP = 520;
 
-/** A spot the trail's head passed. */
 interface PathPoint {
   x: number;
   y: number;
@@ -36,17 +33,16 @@ interface PathPoint {
   t: number;
 }
 
-/** One strand's own way of weaving round the path. */
 interface Strand {
-  /** Where along its wave it starts, radians. */
+  /** Wave phase, radians. */
   phase: number;
-  /** Px along the path from one crest to the next. */
+  /** Wavelength, px along the path. */
   wave: number;
-  /** Multiplier on how far it strays from the path. */
+  /** Multiplier on `trail.spread`. */
   reach: number;
   /** Radians a second its waves run along it. */
   flow: number;
-  /** Where along its fading in and out it starts, and a second, quicker flicker's phase, radians. */
+  /** Phases, radians, of its slow fade in and out (`WISP`) and a quicker flicker. */
   fade: [number, number];
 }
 
@@ -57,14 +53,14 @@ interface PointerTrail {
 
 export class PointerInk {
   private trails: PointerTrail[] = [];
-  /** The trail being laid now, the head laying it, and where the pointer is. */
+  /** The trail being laid, the eased point laying it (`head`), and the pointer (`target`). */
   private current: PointerTrail | null = null;
   private head = { x: 0, y: 0, vx: 0, vy: 0, nx: 0, ny: -1 };
   private target = { x: 0, y: 0 };
 
   constructor(public settings: FlowerSettings) {}
 
-  /** The pointer moved to (x, y). `fresh` starts a new trail there, for a pointer that may have come back anywhere. */
+  /** Points the trail at (x, y), starting a new one there if `fresh` (the pointer may have come back anywhere) or none is being laid. */
   move(x: number, y: number, fresh: boolean) {
     this.target.x = x;
     this.target.y = y;
@@ -75,10 +71,9 @@ export class PointerInk {
   }
 
   /**
-   * Moves the trail's head on `dt` seconds, to garden time `now`, laying down
-   * points as it goes. It eases after the pointer like a critically damped
-   * spring, so it never overshoots, and the path comes out rounded where the
-   * pointer turned sharply.
+   * Advances the head `dt` s to garden time `now`, laying a point every
+   * `SPACING` px. It chases the pointer as a critically damped spring, so it
+   * never overshoots and sharp turns come out rounded.
    */
   step(dt: number, now: number) {
     const trail = this.settings.trail;
@@ -96,7 +91,7 @@ export class PointerInk {
     const d = dt / steps;
     const decay = Math.exp(-w * d);
     for (let k = 1; k <= steps; k++) {
-      // The exact solution over each sub-step, so it's steady however short the lag.
+      // Exact solution over each sub-step, so it stays stable however short `lag` is.
       for (const [p, v, to] of [["x", "vx", this.target.x], ["y", "vy", this.target.y]] as const) {
         const e = h[p] - to;
         const c = h[v] + w * e;
@@ -115,7 +110,6 @@ export class PointerInk {
     }
   }
 
-  /** Paints the trail into the tone image, over everything already there. */
   paintTrail(ctx: CanvasRenderingContext2D, now: number) {
     const trail = this.settings.trail;
     if (!trail.enabled) return;
@@ -134,7 +128,7 @@ export class PointerInk {
         for (let i = 1; i < points.length; i++) {
           const p = points[i];
           const fresh = Math.min(1, 1 - (now - p.t - trail.hold) / trail.fade);
-          // Each strand fades out and back in along its length, out of step with the others.
+          // Fades out and back in along its length, out of step with the other strands.
           const shows = smoothstep(0.2, 0.65, 0.5 + 0.32 * Math.sin((TAU * p.s) / WISP + strand.fade[0]) + 0.18 * Math.sin((TAU * p.s) / (WISP * 0.37) + strand.fade[1]));
           strokeSegment(ctx, xs[i - 1], ys[i - 1], xs[i], ys[i], fresh * shows, trail);
         }
@@ -142,7 +136,7 @@ export class PointerInk {
     }
   }
 
-  /** A strand for each of the settings', weaving out of step with each other, and fading in and out out of step too. */
+  /** Phases spread evenly round the circle, jittered, so strands weave and fade out of step. */
   private newStrands(): Strand[] {
     const { strands, wave, flow } = this.settings.trail;
     const n = Math.max(1, Math.round(strands));
@@ -156,7 +150,6 @@ export class PointerInk {
     }));
   }
 
-  /** Clears the trail. */
   reset() {
     this.trails = [];
     this.current = null;

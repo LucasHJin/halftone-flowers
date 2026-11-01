@@ -1,6 +1,6 @@
 /**
- * Stem geometry. A stem is a chain of equal segments with a rest curve; posing
- * it adds the current bend, growing toward the tip, and walks out the joints.
+ * Stem geometry: a chain of `SEGMENTS` equal segments with a rest curve. Posing
+ * adds the current bend, growing toward the tip, and walks out the joints.
  */
 import { clamp, lerp, TAU } from "../utils/math.js";
 import type { Stem } from "./types.js";
@@ -23,7 +23,6 @@ export function createStem(id: number, rootX: number, rootY: number, segment: nu
     ink: 1,
     tone: 0.7,
     flex: 0.2,
-    // Long stems sway slower.
     omega: TAU * clamp(0.5 * Math.sqrt(320 / Math.max(length, 1)), 0.28, 0.9),
     bend: 0,
     bendVel: 0,
@@ -39,9 +38,9 @@ export function createStem(id: number, rootX: number, rootY: number, segment: nu
 }
 
 /**
- * A stem from the root to the head, its top leaning `lean` radians further
- * right than the straight line between them. With `lean` positive it rises
- * first and arcs over; negative, it sets off leaning out and curves up.
+ * A stem from root (x0, y0) to head (x3, y3), its top leaning `lean` radians
+ * right of the line between them. Positive rises first and arcs over; negative
+ * sets off leaning out and curves up.
  */
 export function curvedStem(id: number, x0: number, y0: number, x3: number, y3: number, lean: number, rand: () => number) {
   const dx = x3 - x0;
@@ -64,7 +63,7 @@ export function curvedStem(id: number, x0: number, y0: number, x3: number, y3: n
   const x2 = x3 - Math.sin(tipAngle) * dist * 0.3;
   const y2 = y3 + Math.cos(tipAngle) * dist * 0.3;
 
-  // Sample the curve, then respace it into equal segments so bending is even along it.
+  // Sample the Bézier, then respace it into equal segments so bending is even along it.
   const n = 48;
   const px: number[] = [];
   const py: number[] = [];
@@ -94,7 +93,7 @@ export function curvedStem(id: number, x0: number, y0: number, x3: number, y3: n
   return s;
 }
 
-/** Recomputes the joints from the rest curve plus the current bend. Branches start where their parent is now. */
+/** Recomputes the joints from the rest curve plus the current bend. Branches start at their parent's joint and turn with it. */
 export function poseStem(s: Stem) {
   let x = s.rootX;
   let y = s.rootY;
@@ -109,7 +108,7 @@ export function poseStem(s: Stem) {
   s.x[0] = x;
   s.y[0] = y;
   for (let k = 0; k < SEGMENTS; k++) {
-    // Bending grows toward the tip, where the stem is thinnest and the flower catches the wind.
+    // Bend grows toward the tip, where the stem is thinnest and the head catches the wind.
     const a = s.rest[k] + offset + s.bend * Math.pow((k + 0.5) / SEGMENTS, 1.5);
     s.angle[k] = a;
     x += s.segment * Math.sin(a);

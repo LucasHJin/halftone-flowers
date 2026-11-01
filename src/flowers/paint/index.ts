@@ -1,24 +1,9 @@
 /**
- * Draws the garden as a tone image rather than in colour: the red channel is
- * how much ink a spot wants, green that times how far along the colour ramp,
- * from light to dark, it sits. The halftone pass turns those into dot sizes and
- * shades. Later shapes cover earlier ones, so a petal in front of a stem
- * replaces it rather than adding to it. Each plant is moved along the ramp by
- * its own amount, so plants that overlap print in different shades.
- *
- * Flower heads are drawn in a local frame at the stem's tip, rotated so that
- * local -y runs out along the stem.
- *
- * While the bed grows in, each plant is cut off above its growing front, so
- * whatever is behind shows through until it gets there.
- *
- * Insects, their trails and loose petals are painted among the plants by depth.
- *
- * A petal coming off a flower fades off it rather than going all at once: the
- * head is painted on its own as it is without the petal and as it was with
- * it, and the two mixed by how much the petal still shows. Whatever the petal
- * hid, a seed pod in a cup or the petal behind it, fades in as it goes, and
- * wherever the two are the same the head is just as if painted once.
+ * Paints the garden as a tone image: red is how much ink a spot wants, green is
+ * red times its place on the colour ramp (0 light, 1 dark). The halftone pass
+ * turns these into dot sizes and shades. Later shapes replace earlier ones, so
+ * a petal over a stem hides it. Heads are drawn in a frame at the stem's tip,
+ * rotated so local -y runs out along the stem.
  */
 import type { Garden } from "../garden.js";
 import { spawnColor, spawnFront } from "../spawn.js";
@@ -38,9 +23,9 @@ import { paintSpike } from "./heads/spike.js";
 import { paintTrumpet } from "./heads/trumpet.js";
 import { aimLight, inLight, inMask, inShade, plantShade, setLight } from "./tone.js";
 
-/** Things that move among the plants, painted between them furthest back first. */
+/** Things that move among the plants (insects, loose petals), painted between them by depth. */
 interface Movers {
-  /** Gathers them in depth order. */
+  /** Sorts them by depth for this frame. */
   beginPaint(): void;
   /** Depth of the next one to paint, or Infinity once they're all painted. */
   readonly nextDepth: number;
@@ -65,7 +50,7 @@ export function paintGarden(ctx: CanvasRenderingContext2D, garden: Garden, mask 
     if (front >= plant.stems[0].rootY) continue;
     ctx.save();
     ctx.beginPath();
-    // Down to well below the roots wherever the front is: it keeps climbing past the top of the screen until the whole bed is in.
+    // Cut off above the growing front. The bottom edge stays below the roots however far up `front` climbs.
     ctx.rect(-garden.width, front, garden.width * 3, garden.height * 2 - front);
     ctx.clip();
     if (mask) inMask(spawnColor(plant, plan), () => paintPlant(ctx, plant, garden.time, shade, false));
@@ -75,7 +60,7 @@ export function paintGarden(ctx: CanvasRenderingContext2D, garden: Garden, mask 
   paintMovers(ctx, movers, Infinity);
 }
 
-/** Paints whatever's left of `movers` that's further back than `depth`, furthest back first, whichever kind it is. */
+/** Paints the unpainted movers further back than `depth`, furthest first, across all kinds. */
 function paintMovers(ctx: CanvasRenderingContext2D, movers: Movers[], depth: number) {
   for (;;) {
     let first: Movers | null = null;
@@ -85,7 +70,7 @@ function paintMovers(ctx: CanvasRenderingContext2D, movers: Movers[], depth: num
   }
 }
 
-/** Paints every plant flat in `colour(plant)`, nearer ones over those further back, fully grown and without insects, petals coming off already gone. */
+/** Paints each plant flat in `colour(plant)`, nearer over further, fully grown, without insects or leaving petals. */
 export function paintSilhouettes(ctx: CanvasRenderingContext2D, garden: Garden, colour: (plant: Plant) => string) {
   for (const plant of garden.plants) inMask(colour(plant), () => paintPlant(ctx, plant, garden.time, garden.settings.shade, false));
 }
@@ -105,15 +90,19 @@ function paintPlant(ctx: CanvasRenderingContext2D, plant: Plant, t: number, shad
   });
 }
 
-/** Two canvases the size of the scene, to paint a head on by itself as it is and as it was. */
+/** Scene-sized scratch canvases for `paintLeaving`: the head as it is and as it was. */
 let layers: [CanvasRenderingContext2D, CanvasRenderingContext2D] | null = null;
 
-/** Paints the head on `s` partway from how it was with the petals coming off it to how it is without them (see the top of this file). */
+/**
+ * Paints the head on `s` with its leaving petals part-faded: the whole head with
+ * and without them, mixed by how much they still show. Mixing whole heads lets
+ * what a petal hid fade in, and leaves areas where both match as if painted once.
+ */
 function paintLeaving(ctx: CanvasRenderingContext2D, s: Stem, t: number) {
   const h = s.head!;
   const { width, height } = ctx.canvas;
   if (!layers || layers[0].canvas.width !== width || layers[0].canvas.height !== height) {
-    // Kept where the scene is, on the CPU or the GPU, so laying them in doesn't copy them across.
+    // Same CPU or GPU backing as the scene, so drawing them onto it doesn't copy across.
     const read = ctx.getContextAttributes?.().willReadFrequently ?? false;
     const make = () => Object.assign(document.createElement("canvas"), { width, height }).getContext("2d", { willReadFrequently: read });
     const [a, b] = [make(), make()];
@@ -136,9 +125,9 @@ function paintLeaving(ctx: CanvasRenderingContext2D, s: Stem, t: number) {
   };
   paintOn(now, false);
   paintOn(was, true);
-  // How much they still show, together: two rarely come off one head at once.
+  // One mix for all leaving petals: two rarely come off one head at once.
   const on = Math.max(...h.leaving.values());
-  // As it is, times what's gone of them, plus as it was, times what's left.
+  // `now` × (1 - on) + `was` × on.
   now.globalCompositeOperation = "destination-in";
   now.globalAlpha = 1 - on;
   now.fillStyle = "#000";

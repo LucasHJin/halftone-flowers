@@ -1,30 +1,9 @@
 /**
- * Petals shaken loose by clicking or tapping a flower, one a click as it nods,
- * from where it was clicked, until it has none left. Each comes off right
- * where it was on the flower, at the size it was there, looking like a petal
- * from that flower (see looseLook). It fades in over the petal on the flower as
- * that fades off it, is carried along with the flower as it sways and nods at
- * first, and lets go, growing a little to the size it's drawn loose and
- * starting to turn and roll, all from still, so there's no moment it's cut
- * free. It drifts away to the left or the right along a wandering curve,
- * some sailing far across the bed, others sinking toward the ground, now and
- * then looping the loop, turning and rocking as it goes. None fade: each keeps
- * going until it's off the screen. A moment after it comes off, it turns
- * over a second or so from its flower's colours to the pointer trail's,
- * keeping its shading, the new colour spreading across it from where the
- * flower was clicked, dot by dot along a soft front.
- *
- * Each keeps the depth of the flower it came from, just in front of it, so it
- * passes over plants further back and behind nearer ones, and never changes
- * places with a plant it's over.
- *
- * A click that misses the flowers puffs tiny petals out from the spot instead,
- * copies of petals off a few flowers in the bed, in the pointer trail's
- * colours from the start. Each is at its own depth among the plants,
- * like an insect, so some pass in front of flowers and some behind, the ones
- * further back a little smaller and lighter. They fly out all round, each
- * growing in as it goes and swelling a little past its size, slow as the puff
- * dies down, then drift away like the rest.
+ * `shed` takes one petal off a clicked flower: it cross-fades with the petal
+ * there, rides with the flower briefly, then drifts, turning to the trail's
+ * colours outward from the click. `puff` throws tiny copies of a few flowers'
+ * petals out from a click on empty space, already in the trail's colours and
+ * each at its own depth. None fade out; each drifts until it is off screen.
  */
 import { clamp, lerp, TAU } from "../utils/math.js";
 import type { Garden } from "./garden.js";
@@ -33,56 +12,56 @@ import { looseLook, petalAt, petalIndices, type LoosePaint } from "./paint/loose
 import { aimLight, inAccent, inLight, inShade, lightStrength, plantShade } from "./paint/tone.js";
 import type { Head, Plant, Stem } from "./types.js";
 
-/** The most loose at once; past this, a click still nods the flower but shakes no more off. */
+/** Max loose plus queued petals; past it a click still nods its flower but nothing comes off. */
 const MOST = 150;
 
-/** How far in front of its flower a petal is, in depth, so it's painted over it. */
+/** Depth just in front of its flower, so a shed petal paints over it. */
 const ON_TOP = 5e-5;
 
-/** Seconds a petal takes to come round to its heading after straying. */
+/** Time constant, s, of turning back to its aimed heading. */
 const STEER = 1.4;
 
-/** Fastest a petal strays from its heading either way, radians a second. */
+/** Peak turn rate of its wander, rad/s. */
 const WANDER = 0.8;
 
-/** Seconds after one loop before another can start. */
+/** Seconds after a loop ends before another can start. */
 const CALM = 3;
 
-/** How much further from a click than the nearest petal one can be and still be the one that comes off, as a share of its flower's size. */
+/** A petal this much further from the click than the nearest may come off instead, × `h.radius`. */
 const NEAR = 0.15;
 
-/** How far from a click the nearest petal can be for one to come off at all, as a share of its flower's size (a spike's floret's). */
+/** Nothing comes off if the nearest petal is further than this from the click, × `h.radius`. */
 const REACH = 1.5;
 
-/** Seconds a petal takes to fade off its flower as the loose one fades in over it. */
+/** Seconds of cross-fade from the petal on the flower to the loose one. */
 const HANDOFF = 0.4;
 
-/** Seconds a loose petal is carried along with its flower, letting go as it goes. */
+/** Seconds a shed petal rides along with its flower, easing off. */
 const RELEASE = 0.6;
 
-/** Seconds a petal off a flower takes to ease from its size there into its size loose, and to start turning and rolling. */
+/** Seconds a shed petal takes to grow into its loose size and shading, and to start spinning and rolling. */
 const SETTLE = 0.6;
 
-/** Seconds a puff's petal takes to grow in, swelling past its size and settling back. */
+/** Seconds a puffed petal takes to grow in. */
 const GROW = 0.45;
 
-/** Seconds a puff's outward rush takes to die down to about a third. */
+/** Time constant, s, of a puff's outward rush; its speed is set so it covers `splash.reach`. */
 const PUFF = 0.22;
 
-/** How many flowers in the bed a puff's petals copy. */
+/** Random flowers (repeats allowed) a puff's petals copy. */
 const SOURCES = 3;
 
-/** How deep the soft front the trail's colours spread across a petal behind is, in diamonds, and how many steps it's painted in. */
+/** Width of the soft colour front in cells, and the steps it's painted in. */
 const FRONT = 2;
 const FRONT_STEPS = 4;
 
-/** How far past its size a puff's petal swells as it grows in, as a back-ease's overshoot: about an eighth. */
+/** Back-ease overshoot of a puffed petal's grow-in; peaks about 10% past full size. */
 const SWELL = 2;
 
-/** Its size as a puff's petal sets out, as a share of its size loose. */
+/** A puffed petal's starting size, as a share of its loose size. */
 const SEED = 0.2;
 
-/** A petal about to come off: the flower it's on, which of its petals it is, and when, in garden seconds. */
+/** A petal queued to come off: petal `k` of `stem`'s head, at garden time `at`. */
 interface Coming {
   plant: Plant;
   stem: Stem;
@@ -95,73 +74,67 @@ interface Coming {
 interface LoosePetal {
   x: number;
   y: number;
-  /** Depth among the plants: its flower's, just in front of it, or a puff's petal's own. */
+  /** Depth, 0 back to 1 front: just in front of its flower's, or random for a puffed one. */
   z: number;
-  /** The plant it came from, whose shade it prints in unless it's a puff's. */
+  /** Source plant, whose shade it prints in unless `puffed`. */
   plant: Plant;
   /** Which way it drifts: -1 left, 1 right. */
   side: number;
-  /** Which way it's going, radians clockwise from rightward. */
+  /** Direction of travel, radians clockwise from rightward. */
   heading: number;
   /** Px a second now, and its own pace in a moderate wind. */
   speed: number;
   cruise: number;
-  /** How far below level it settles into heading between loops, radians: a little to sail off far, well below to sink. */
+  /** Radians below level it heads between loops: small sails far, large sinks. */
   aim: number;
   /** Seconds since it came loose. */
   age: number;
-  /** Phases and rate of its wandering, so no two drift alike. */
+  /** Two phases, radians, and a rate, rad/s, of its wander. */
   wander: [number, number, number];
-  /** The loop it's going round: seconds in, seconds it takes, and which way round, 1 clockwise on screen or -1 anticlockwise. */
+  /** Current loop: seconds in, its length in s, and `way` 1 clockwise on screen, -1 anticlockwise. */
   loop: { at: number; length: number; way: number } | null;
   /** Seconds until it can next loop. */
   calm: number;
-  /** Turned in the screen, radians clockwise, and how fast it turns of its own accord. */
+  /** In-screen rotation, radians clockwise, and its own turn rate, rad/s. */
   spin: number;
   spinRate: number;
-  /** How far it's rolled about its length, radians, and how fast it rolls. */
+  /** Roll about its length, radians, and roll rate, rad/s. */
   flip: number;
   flipRate: number;
   paint: LoosePaint;
   /** Px across its longest way. */
   length: number;
-  /** Its size as it came off, as a share of its size loose. */
+  /** Starting size, as a share of its loose size. */
   from: number;
-  /**
-   * While it's coming away, the head it's coming off, which of its petals it
-   * was, and where that was and which way it lay as it came off; null once
-   * it's let go, and for a puff's.
-   */
+  /** While coming off: its stem, petal index, and position and angle as it came off; null after, and for puffed ones. */
   peel: { stem: Stem; k: number; x: number; y: number; a: number } | null;
-  /** How far its flower has carried it from where it came off, and turned it, as it lets go. */
+  /** Offset px and turn radians its flower has carried it by since it came off, easing to 0 by `RELEASE`. */
   carry: [number, number, number];
-  /** How far past its size it swells as it grows in, as a back-ease's overshoot; 0 for none. */
+  /** Back-ease overshoot as it grows in; 0 for none. */
   swell: number;
-  /** Px a second it's still rushing out from a puff, dying down. */
+  /** Velocity, px/s, of a puff's outward rush, decaying over `PUFF`. */
   kick: [number, number];
-  /** Puffed out by a click that missed the flowers, rather than shaken off one: shaded by its own depth, not its flower's. */
+  /** From `puff`: shaded by its own `z`, not its plant's. */
   puffed: boolean;
   /**
-   * Its turning to the pointer trail's colours: where on it the change starts,
-   * in its own frame as it came off, how far from there each even share of it
-   * is (see sharesFrom), the seconds after it comes off that it starts, and the
-   * seconds it takes; none for a puff's, which starts in them.
+   * Turning to the trail's colours: start point in its own frame as it came off,
+   * radii holding each even share of its area (see `sharesFrom`), and delay and
+   * duration in s. `takes` is 0 for puffed ones, which start turned.
    */
   turn: { x: number; y: number; shares: number[]; wait: number; takes: number };
 }
 
 let probe: CanvasRenderingContext2D | null = null;
 
-/** How many even shares of a petal's area its turning colour is timed by. */
+/** Equal-area steps the colour front is timed by. */
 const SHARES = 10;
 
 /**
- * How far from (x, y), in its own frame, a loose petal `length` px long has
- * each even share of its area, from where it's painted: the nearest it comes,
- * then out past a tenth of it, two tenths and so on to the furthest.
+ * Radii about (x, y), in the petal's own frame, holding 0, 1/`SHARES`, ... and
+ * all of its painted area, measured off a rasterised copy at its loose size.
  */
 function sharesFrom(paint: LoosePaint, length: number, x: number, y: number): number[] {
-  // It's drawn about its middle, curling a little past its length at most.
+  // Drawn about its middle; a curled petal can overrun `length` a little.
   const size = Math.ceil(length * 1.5) + 4;
   probe ??= document.createElement("canvas").getContext("2d", { willReadFrequently: true })!;
   const c = probe.canvas;
@@ -182,7 +155,7 @@ function sharesFrom(paint: LoosePaint, length: number, x: number, y: number): nu
   return Array.from({ length: SHARES + 1 }, (_, k) => all[Math.min(all.length - 1, Math.round((k / SHARES) * (all.length - 1)))]);
 }
 
-/** How a petal drifts once loose, its own pace, wandering, loops and tumbling, from still. */
+/** Random drift for a new loose petal, at rest. `sink` is the chance it sinks instead of sailing far. */
 function drifting(bloom: number, sink: number) {
   return {
     speed: 0,
@@ -200,14 +173,13 @@ function drifting(bloom: number, sink: number) {
 export class Petals {
   list: LoosePetal[] = [];
   private coming: Coming[] = [];
-  /** Heads with petals still fading off them. */
+  /** Heads with petals fading off; their `leaving` is cleared and refilled every `step`. */
   private fading = new Set<Head>();
   private order: LoosePetal[] = [];
   private next = 0;
 
   constructor(private garden: Garden) {}
 
-  /** Clears them all away, for a newly laid out bed. */
   reset() {
     this.list = [];
     this.coming = [];
@@ -215,11 +187,9 @@ export class Petals {
   }
 
   /**
-   * Shakes one of the petals the head on `s` has left off it, a moment into
-   * its nod from a click at (x, y): the one nearest the click, or one about as
-   * near, so it comes from where the flower was clicked, even partway up a
-   * long spike or plume. None does if even the nearest is too far off, as on a
-   * stretch of spike already bare.
+   * Queues the petal left on `s`'s head nearest the click at (x, y), or one
+   * about as near, to come off a moment into the nod. None if even the nearest
+   * is past `REACH`, as on a bare stretch of spike.
    */
   shed(plant: Plant, s: Stem, x: number, y: number) {
     const h = s.head!;
@@ -238,7 +208,7 @@ export class Petals {
     this.coming.push({ plant, stem: s, k, at: this.garden.time + lerp(0.05, 0.15, Math.random()), tap: [x, y] });
   }
 
-  /** Petal `k` comes off its head, right where it was. */
+  /** Takes petal `k` off its head, starting loose where it was, at its angle and size there. */
   private loosen({ plant, stem: s, k, tap }: Coming) {
     const { cell, settings, time, bloom } = this.garden;
     const { size, sink, wait, turn } = settings.petals;
@@ -246,10 +216,10 @@ export class Petals {
     h.lost.add(k);
     const look = looseLook(s, h, k, cell, size);
     const at = petalAt(s, h, k, time);
-    // Mostly off to the side it was on, setting out the way it pointed and lifting, from still.
+    // Mostly toward the side it pointed, setting out that way but tilted up.
     const side = Math.cos(at.out) + lerp(-0.6, 0.6, Math.random()) >= 0 ? 1 : -1;
     const from = Math.min(1, 1 / look.scale);
-    // The click in its own frame, unturned and at its loose size, as it is the moment it comes off.
+    // The click in its own frame: unrotated by `at.a` and scaled from `from` up to its loose size.
     const dx = tap[0] - at.x;
     const dy = tap[1] - at.y;
     const ox = (dx * Math.cos(at.a) + dy * Math.sin(at.a)) / from;
@@ -263,7 +233,7 @@ export class Petals {
       plant,
       side,
       heading: Math.atan2(Math.sin(at.out) - 0.8, Math.cos(at.out)),
-      // Lying as it lay on the flower, facing you.
+      // As it lay on the flower, face on.
       spin: at.a,
       flip: 0,
       paint: look.paint,
@@ -278,7 +248,7 @@ export class Petals {
     });
   }
 
-  /** Tiny petals puff out all round (x, y), copies of petals off a few flowers in the bed. */
+  /** Tiny copies of petals off up to `SOURCES` random flowers burst out all round (x, y). */
   puff(x: number, y: number) {
     const { cell, settings, bloom, plants } = this.garden;
     const { count, size, reach } = settings.splash;
@@ -293,10 +263,10 @@ export class Petals {
       const h = s.head!;
       const all = petalIndices(s, h);
       const k = all[Math.floor(Math.random() * all.length)];
-      // The same few dots long off a lily as off a daisy, a little smaller further back: a loose petal's length goes with the size it's asked for.
+      // Scaled so every kind comes out the same length in px, a little smaller further back (low `z`).
       const z = Math.random();
       const look = looseLook(s, h, k, cell, (lerp(size[0], size[1], Math.random()) * lerp(0.85, 1.1, z) * bloom) / looseLook(s, h, k, cell, 1).length);
-      // Evenly round, each nudged off its share, flying its own way out.
+      // Evenly round, each jittered within its share.
       const a = start + (TAU * (i + lerp(-0.35, 0.35, Math.random()))) / n;
       const rush = (lerp(reach[0], reach[1], Math.random()) * bloom) / PUFF;
       this.list.push({
@@ -336,7 +306,7 @@ export class Petals {
     for (const p of this.list) {
       p.age += dt;
       if (p.peel) this.peel(p, p.peel);
-      // Livelier and flatter in a gust, whichever way it's going, and faster going down than up, as if it had a little weight.
+      // Faster and flatter in a gust either way, and faster heading down than up, as if it had some weight.
       const push = clamp(Math.abs(garden.windNow(p.x, p.y)), 0, 1.5);
       p.speed = ease(p.speed, p.cruise * speed * (0.6 + 0.5 * push) * (1 + 0.3 * Math.sin(p.heading)), 0.6, dt);
       const below = p.aim * (1 - 0.3 * Math.min(push, 1));
@@ -346,7 +316,7 @@ export class Petals {
       const drift = wrap(aim - p.heading) / STEER + (WANDER * (Math.sin(t + p1) + 0.6 * Math.sin(2.3 * t + p2))) / 1.6;
       let turn = drift;
       if (p.loop) {
-        // A whole turn round, tightest halfway, easing into and out of it, so it comes out going the way it went in.
+        // `2 f²` averages 1, so the loop adds one full turn, tightest halfway, and it comes out heading as it went in.
         const f = Math.sin((Math.PI * p.loop.at) / p.loop.length);
         turn = p.loop.way * (TAU / p.loop.length) * 2 * f * f + (1 - f) * drift;
         p.loop.at += dt;
@@ -355,14 +325,14 @@ export class Petals {
           p.calm = CALM;
         }
       } else if ((p.calm -= dt) <= 0 && Math.abs(wrap(aim - p.heading)) < 0.5 && Math.random() < (loops / 60) * (0.4 + push) * dt) {
-        // Mostly lifted up and over, now and then dipping under. Up and over is anticlockwise going right, clockwise going left.
+        // 75% go up and over (anticlockwise going right, clockwise going left); the rest dip under.
         const over = Math.random() < 0.75;
         p.loop = { at: 0, length: lerp(1.8, 2.8, Math.random()), way: over ? -p.side : p.side };
       }
       p.heading = wrap(p.heading + turn * dt);
       p.x += (Math.cos(p.heading) * p.speed + p.kick[0]) * dt;
       p.y += (Math.sin(p.heading) * p.speed + p.kick[1]) * dt;
-      // Turns with its path, and rolls quicker the faster it goes, tumbling as it rushes out of a puff. Coming off a flower, it starts still.
+      // Spins with its path and rolls faster the faster it moves, puff rush included. Shed ones ease in from still over `SETTLE`.
       const start = p.puffed ? 1 : smoothstep(0, SETTLE, p.age);
       p.spin += (p.spinRate + 0.7 * turn) * start * dt;
       p.flip += p.flipRate * (0.4 + (0.6 * (p.speed + Math.hypot(p.kick[0], p.kick[1]))) / p.cruise) * start * dt;
@@ -373,7 +343,7 @@ export class Petals {
     this.list = this.list.filter((p) => p.x > -p.length && p.x < W + p.length && p.y < H + p.length && p.y > -H);
   }
 
-  /** Fades `p`'s petal off its flower as it fades in, and carries it along with the flower, letting go. */
+  /** Fades the petal on the flower out over `HANDOFF`, and carries `p` with the flower, easing off over `RELEASE`. */
   private peel(p: LoosePetal, { stem, k, x, y, a }: NonNullable<LoosePetal["peel"]>) {
     const h = stem.head!;
     if (p.age < HANDOFF) {
@@ -390,37 +360,35 @@ export class Petals {
     p.carry = [(at.x - x) * hold, (at.y - y) * hold, wrap(at.a - a) * hold];
   }
 
-  /** Puts them in depth order, ready for paintNext. */
+  /** `beginPaint`, `nextDepth` and `paintNext` are the `Movers` protocol in paint/index.ts. */
   beginPaint() {
     this.order = this.list.slice().sort((a, b) => a.z - b.z);
     this.next = 0;
   }
 
-  /** Depth of the next one to paint, or Infinity once they're all painted. */
   get nextDepth() {
     return this.next < this.order.length ? this.order[this.next].z : Infinity;
   }
 
-  /** Paints the next one in depth order, in its plant's shade. */
   paintNext(ctx: CanvasRenderingContext2D) {
     const p = this.order[this.next++];
     const face = Math.cos(p.flip);
     ctx.save();
     ctx.translate(p.x + p.carry[0], p.y + p.carry[1]);
     ctx.rotate(p.spin + p.carry[2]);
-    // Off a flower, it eases from its size there into its loose size and shading. A puff's grows quickly at first, swelling past it, then settles.
+    // Shed: from its size on the flower into its loose size and shading over `SETTLE`. Puffed: ease-out over `GROW`, overshooting by `swell`.
     const t = Math.min(p.age / GROW, 1) - 1;
     const off = p.puffed ? 1 + t ** 3 : smoothstep(0, SETTLE, p.age);
     const grown = lerp(p.from, 1, off + p.swell * t * t * (1 + t));
-    // Off a flower, it fades in as the petal there fades off, quickly enough that between them they don't thin out.
+    // Fades in faster than the flower's petal fades out, so the pair never thins.
     const shown = p.puffed ? 1 : 1 - (1 - Math.min(p.age / HANDOFF, 1)) ** 2;
     ctx.globalAlpha = shown;
-    // Rolling about its length it narrows and opens out again, but never past half its width, so its shape still shows.
+    // Rolling narrows it, but never below 0.55 of its width, so its shape still shows.
     ctx.scale(grown, grown * Math.max(Math.abs(face), 0.55));
-    // Its inner face prints lighter than its back. A puff's petal prints lighter the further back it is, as an insect does; the rest in their flower's shade.
+    // Puffed ones print lighter the further back, like insects; shed ones in their plant's shade.
     const { shade } = this.garden.settings;
     const by = p.puffed ? shade.depth * (p.z - 1) : plantShade(p.plant, shade);
-    // Its sides lit as they face now.
+    // Its sides lit as they face now; its inner face (`face` > 0) prints lighter than its back.
     aimLight(p.spin);
     const paint = () => inShade(by, () => inLight(() => p.paint(ctx, -lightStrength() * face * off)));
     const { x, y, shares, wait, takes } = p.turn;
@@ -429,8 +397,8 @@ export class Petals {
     else if (turned <= 0) paint();
     else {
       paint();
-      // The trail's colours over it, inside a circle growing from where it was clicked, a step stronger each smaller one, so the front is soft.
-      // It sweeps an even share of the petal each moment, so the change takes the whole time rather than racing across its broad middle.
+      // Accent layered inside `FRONT_STEPS` shrinking circles about the click, stronger inward, so the front is soft.
+      // The radius follows `shares`, so area turns at an even rate instead of racing across the broad middle.
       const depth = FRONT * this.garden.cell;
       const at = turned * SHARES;
       const k = Math.floor(at);
@@ -440,7 +408,7 @@ export class Petals {
         ctx.beginPath();
         ctx.arc(x, y, r - (depth * m) / FRONT_STEPS, 0, TAU);
         ctx.clip();
-        // Laid over the last, this brings the trail's share there up to (m + 1) / FRONT_STEPS.
+        // Over the layers before, this brings the accent's share up to (m + 1) / `FRONT_STEPS`.
         ctx.globalAlpha = shown / (FRONT_STEPS - m);
         inAccent(paint);
         ctx.restore();

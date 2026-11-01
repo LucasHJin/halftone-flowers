@@ -11,7 +11,7 @@ export function cupShape(h: Head) {
   const R = h.radius;
   const sinT = h.face;
   const cosT = Math.sqrt(1 - sinT * sinT);
-  // Rim radius, widest radius, height, and how far up the widest point sits.
+  // Rim radius, widest radius and height as shares of R; widest point's height as a share of height.
   const shape = h.kind === "poppy" ? [1, 0.92, 0.85, 0.75] : h.kind === "tulip" ? [0.52, 0.78, 1.55, 0.55] : [0.82, 0.95, 1.05, 0.6];
   const height = R * shape[2];
   const top = -height * cosT;
@@ -37,10 +37,9 @@ export function cupShape(h: Head) {
 type CupShape = ReturnType<typeof cupShape>;
 
 /**
- * The petals a cup is made of, as sectors round its rim, from and to: radians
- * round its axis from its right, toward you at π/2. A tulip's are its two at
- * the sides and the one in front overlapping them; a poppy's and a rose's go
- * evenly round from wherever the head is spun to.
+ * Each petal's sector round the cup's axis, [from, to] in radians from its right,
+ * π/2 toward you. A tulip has two side petals and a front one overlapping them;
+ * poppies and roses split evenly from `h.spin`.
  */
 export function cupSectors(h: Head): [number, number][] {
   if (h.kind === "tulip") return [[-Math.PI / 2, Math.PI / 6], [(5 * Math.PI) / 6, (3 * Math.PI) / 2], [Math.PI / 6, (5 * Math.PI) / 6]];
@@ -49,11 +48,8 @@ export function cupSectors(h: Head): [number, number][] {
 }
 
 /**
- * Cup-shaped flowers seen at a tilt: a bowl whose rim is an ellipse. Poppies are
- * wide and open with a dark centre, tulips tall and closed with pointed tips,
- * roses round with a spiral of inner petals. Where petals have been shaken
- * off, the bowl is cut back to those still on it, and what's in the middle
- * shows: a poppy's seed pod, a tulip's pistil, a rose's hip.
+ * Poppies, tulips and roses as a tilted bowl with an elliptical rim. Once petals
+ * are shaken off, the bowl is clipped to those left and the core shows.
  */
 export function paintCup(ctx: CanvasRenderingContext2D, h: Head) {
   const cup = cupShape(h);
@@ -76,7 +72,7 @@ export function paintCup(ctx: CanvasRenderingContext2D, h: Head) {
   }
   const sectors = cupSectors(h);
   const bare = h.lost.size > 0;
-  // With the petal facing you gone, what's in the middle shows in front of those behind it.
+  // With the petal facing you (its sector holds π/2) gone, the core paints over the petals behind.
   const open = bare && sectors.some(([from, to], k) => h.lost.has(k) && ((((Math.PI / 2 - from) % TAU) + TAU) % TAU) <= to - from);
   if (bare && !open) paintCore(ctx, h, cup, sun);
   if (bare) {
@@ -97,7 +93,7 @@ export function paintCup(ctx: CanvasRenderingContext2D, h: Head) {
     }
   }
 
-  // Outer bowl: right side down to the base, left side up, then the far half of the rim.
+  // Outer bowl: right side down, left side up, then the far half of the rim.
   ctx.beginPath();
   ctx.moveTo(rim, top);
   ctx.bezierCurveTo(lerp(rim, widest, 0.9) * 1.04, lerp(top, yW, 0.35), widest, lerp(top, yW, 0.75), widest, yW);
@@ -111,9 +107,9 @@ export function paintCup(ctx: CanvasRenderingContext2D, h: Head) {
     ctx.lineTo(Math.cos(th) * rim * w, top + Math.sin(th) * ry * w);
   }
   ctx.closePath();
-  // Deepest at the base and palest at the rim, and slanted so the side toward the light prints lighter too.
+  // Darkest at the base, palest at the rim, slanted to be lighter toward the light.
   const g = ctx.createLinearGradient(-sun[0] * widest * 0.6, 0, sun[0] * widest * 0.6, top - ry);
-  // How much of the light comes from the side rather than straight down the stem.
+  // How much light comes from the side, not down the stem.
   const side = lightStrength() * Math.abs(sun[0]);
   g.addColorStop(0, tone(h.blush ? h.centre : h.ink, amount, side));
   g.addColorStop(h.blush ? 0.35 : 0.3, tone(h.ink, amount * 0.95, side * 0.5));
@@ -149,7 +145,7 @@ export function paintCup(ctx: CanvasRenderingContext2D, h: Head) {
       ctx.beginPath();
       ctx.ellipse(0, cy, R * 0.28, R * 0.28 * sinT, 0, 0, TAU);
       ctx.fill();
-      // A ring of stamens around the seed head.
+      // Stamens round the seed head.
       ctx.fillStyle = tone(h.centre, 0.85);
       for (let k = 0; k < 12; k++) {
         const th = (k / 12) * TAU + h.spin;
@@ -174,7 +170,7 @@ export function paintCup(ctx: CanvasRenderingContext2D, h: Head) {
   ctx.strokeStyle = tone(h.ink, amount * 0.55);
   ctx.lineWidth = Math.max(1, R * 0.06);
   if (h.kind === "tulip") {
-    // The front petal: pointed, overlapping the other two, with its seams showing.
+    // Front petal, pointed and overlapping the side two, with its seams.
     if (!h.lost.has(2)) {
       ctx.beginPath();
       ctx.moveTo(-widest * 0.72, yW);
@@ -191,7 +187,7 @@ export function paintCup(ctx: CanvasRenderingContext2D, h: Head) {
       ctx.stroke();
     }
   } else {
-    // Where the outer petals overlap.
+    // Seams where the outer petals overlap.
     ctx.beginPath();
     ctx.moveTo(base * 1.5, top * 0.05);
     ctx.quadraticCurveTo(widest * 0.55, yW, rim * 0.35, top + ry);
@@ -208,13 +204,12 @@ export function paintCup(ctx: CanvasRenderingContext2D, h: Head) {
 }
 
 /**
- * Everywhere the petals still on a cup reach, each a sector of the bowl from
- * the base up past the rim, a little generous so the bowl's own outline still
- * shows where they meet it.
+ * Clip path over the petals still on a cup, each a sector of the bowl from the
+ * base to past the rim, oversized so the bowl's own outline survives the clip.
  */
 function petalsLeft(h: Head, cup: CupShape, sectors: [number, number][]) {
   const { R, cosT, sinT, rim, widest, height, bulge, base } = cup;
-  // Up the bowl: px up its axis, and its radius there.
+  // [px up the axis, radius there], from the base to past the rim.
   const profile: [number, number][] = [
     [-R * 0.1, base * 1.5],
     [height * bulge * 0.5, lerp(base, widest, 0.75) * 1.12],
@@ -232,7 +227,7 @@ function petalsLeft(h: Head, cup: CupShape, sectors: [number, number][]) {
     const [rimUp, rimR] = profile[profile.length - 1];
     for (let j = 1; j < 12; j++) at(rimUp, rimR, lerp(from, to, j / 12));
     for (let i = profile.length - 1; i >= 0; i--) at(profile[i][0], profile[i][1], to);
-    // All wound the same way, so where they overlap they add up rather than cancel out.
+    // Wind every sector the same way, so overlaps add up under the nonzero rule instead of cancelling.
     let area = 0;
     for (let i = 0; i < pts.length; i += 2) {
       const j = (i + 2) % pts.length;
@@ -249,18 +244,18 @@ function petalsLeft(h: Head, cup: CupShape, sectors: [number, number][]) {
   return path;
 }
 
-/** What's in the middle of a cup, hidden while its petals are all on it: a poppy's seed pod, a tulip's pistil, a rose's hip. */
+/** A cup's core, hidden while every petal is on: a poppy's seed pod, a tulip's pistil, a rose's hip. */
 function paintCore(ctx: CanvasRenderingContext2D, h: Head, cup: CupShape, sun: [number, number]) {
   const { R, sinT, top, ry } = cup;
   if (h.kind === "poppy") {
-    // An urn on the stem, crowned with the disc the seed head is drawn as inside the cup.
+    // An urn, topped with the same seed-head disc drawn inside the cup.
     const crown = top + ry * 0.2;
     ctx.fillStyle = acrossLight(ctx, 0, crown * 0.5, R * 0.2, 1, 0.75, sun);
     blob(ctx, 0, crown * 0.5, R * 0.2, Math.max(-crown * 0.55, R * 0.12), 0);
     ctx.fillStyle = dome(ctx, 0, crown, R * 0.28, h.centre, 1, sun);
     blob(ctx, 0, crown, R * 0.28, R * 0.28 * Math.max(sinT, 0.35), 0);
   } else if (h.kind === "tulip") {
-    // A column standing up from the base, with the stigma's lobes on top in the ink of the cup's inside.
+    // Pistil column, with stigma lobes on top in the cup's inside ink.
     ctx.fillStyle = acrossLight(ctx, 0, top * 0.45, R * 0.12, 1, 0.7, sun);
     blob(ctx, 0, top * 0.45, R * 0.12, Math.max(-top * 0.45, R * 0.1), 0);
     ctx.fillStyle = tone(h.centre === 2 ? 1 : h.centre, 0.9);

@@ -1,16 +1,15 @@
 /**
- * How much of a spot plants nearer than some depth hide, read off a small map
- * of the bed with each plant painted flat in a red that deepens with its
- * depth, so wherever plants overlap, the nearest one shows.
+ * How much of a spot plants nearer than some depth hide, read off a low-res map
+ * with each plant painted flat, nearer over further, its red set by `level`.
  */
 import { clamp } from "../../utils/math.js";
 import type { Garden } from "../garden.js";
 import { paintSilhouettes } from "../paint/index.js";
 
-/** Map px to a screen px. */
+/** Map px per screen px. */
 const SCALE = 1 / 3;
 
-/** The red a plant `depth` back is painted on the map: 1 at the back to 255 at the front, leaving 0 for bare ground. */
+/** Map red for a plant at `depth`: 1 at the back to 255 at the front; 0 is bare ground. */
 function level(depth: number) {
   return 1 + Math.round(clamp(depth, 0, 1) * 254);
 }
@@ -21,7 +20,7 @@ export class Cover {
   private width = 0;
   private height = 0;
 
-  /** Paints the map from the bed as it's posed now. */
+  /** Repaints the map from the bed as currently posed. */
   paint(garden: Garden) {
     if (!this.ctx) {
       this.ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
@@ -44,14 +43,14 @@ export class Cover {
     this.height = h;
   }
 
-  /** Whether a plant `depth` back is the nearest at (x, y) as last painted, so it's what shows there. */
+  /** Whether a plant at `depth` is the nearest at (x, y), as last painted. */
   shows(x: number, y: number, depth: number) {
     const i = Math.floor(x * SCALE);
     const j = Math.floor(y * SCALE);
     return i >= 0 && j >= 0 && i < this.width && j < this.height && this.data[(j * this.width + i) * 4] === level(depth);
   }
 
-  /** The share of the disc of radius `r` px about (x, y) that plants nearer than `depth` hide, as last painted. Off the map counts as clear. */
+  /** Share of the disc of radius `r` px about (x, y) that plants nearer than `depth` hide, as last painted. Off the map counts as clear. */
   hidden(x: number, y: number, r: number, depth: number) {
     const near = level(depth);
     const cx = x * SCALE;

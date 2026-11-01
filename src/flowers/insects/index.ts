@@ -1,15 +1,8 @@
 /**
- * Butterflies and bees that come and go. Every so often one flies in from
- * the side or the top, visits a few flowers, sitting on each a while, and
- * flies off again, leaving a fading trail behind it.
- *
- * They fly in 3D: depth among the plants is a third direction to fly in, so
- * one heading into or out of the screen passes behind some plants and in
- * front of others, and it's painted between them in that order. It never
- * passes through the head of the flower it's visiting or the one it just
- * left: while over it, it keeps to its own side, and crosses over only once
- * clear. It only settles where nearer plants don't hide it. It prints in the
- * halftone's accent ramp. Clicked or tapped, it sends up a heart.
+ * Butterflies and bees that fly in from an edge, visit a few flowers and leave.
+ * `z` is depth among the plants, so each paints between them in depth order.
+ * It crosses a flower's depth only once clear of its head, and settles only
+ * where nearer plants don't hide it.
  */
 import { clamp, lerp, TAU } from "../../utils/math.js";
 import type { Garden } from "../garden.js";
@@ -26,24 +19,24 @@ export type { Insect, InsectKind } from "./insect.js";
 
 const GROUPS: Record<InsectKind, InsectGroup> = { butterfly: BUTTERFLY, bee: BEE };
 
-/** How far in front of its flower a sitting insect is, in depth, so it's painted just over it. */
+/** Depth a perched insect sits in front of its flower, so it paints just over it. */
 const ON_TOP = 1e-4;
 
-/** How far in front of or behind a flower an insect comes round to before crossing over its head, in depth. */
+/** Depth in front of or behind a flower an insect moves to, beside its head, before crossing over it. */
 const AHEAD = 0.12;
 
-/** Most of where it would sit that nearer plants may hide for an insect to settle on a flower. */
+/** Max share of its perch that nearer plants may hide for an insect to settle there. */
 const HIDDEN = 0.12;
 
-/** The most hearts showing at once; past this, clicking one sends up no more. */
+/** Max hearts showing at once; further clicks send none. */
 const HEARTS = 12;
 
-/** Where to fly to: across, down, and depth. */
+/** Px across, px down, and depth. */
 type Goal = readonly [number, number, number];
 
 type Edge = "left" | "right" | "top";
 
-/** One thing to paint: an insect, one segment of a trail, or a heart. */
+/** An insect, a trail segment ending at point `i`, or a heart. */
 interface Part {
   z: number;
   insect: Insect | null;
@@ -66,7 +59,6 @@ export class Insects {
     this.reset();
   }
 
-  /** Clears every insect and trail away, for a newly laid out bed. */
   reset() {
     this.list = [];
     this.trails = [];
@@ -74,7 +66,7 @@ export class Insects {
     this.wait = this.gap() * 0.4;
   }
 
-  /** Sends one in now, whatever the timing and limit; without a kind, picked by the settings' odds. */
+  /** Sends one in now, ignoring `wait` and `settings.most`; without `kind`, picks one by `settings.odds`. */
   release(kind?: InsectKind) {
     const settings = this.garden.settings.insects;
     const [butterflies, bees] = settings.odds;
@@ -85,7 +77,6 @@ export class Insects {
     const group = GROUPS[kind];
     const species = pick(group.species.map((sp) => sp.odds));
     const sp = group.species[species];
-    // Some a good deal bigger than others of their species.
     const size = this.garden.bloom * group.size * sp.size * settings.size * lerp(0.9, 1.3, Math.random());
     const quirks = randomQuirks();
     quirks.pace *= sp.pace;
@@ -135,7 +126,7 @@ export class Insects {
     // Already on its way in, and facing that way.
     const goal = b.stem ? { ...perch(b.stem), z: b.plant!.depth } : { x: b.exitX, y: b.exitY, z: b.zGoal };
     if (from === "top" && b.stem) {
-      // Off to the roomier side of its flower, so it comes down to it no steeper than it dives.
+      // Start on the roomier side of its flower, far enough out to descend no steeper than `flight.dive`.
       const W = this.garden.width;
       const out = size * 1.5;
       x = clamp(goal.x + Math.sign(W / 2 - goal.x || 1) * ((goal.y - y) / Math.tan(group.flight.dive)), -out, W + out);
@@ -154,11 +145,11 @@ export class Insects {
     this.trails.push(b.trail);
   }
 
-  /** The insect showing at (x, y), going by `cover` as last painted, the nearest if there are several; null if none. */
+  /** The nearest insect showing at (x, y), per `cover` as last painted, or null. */
   at(x: number, y: number, cover: Cover) {
     let hit: Insect | null = null;
     for (const b of this.list) {
-      // A little wider than it is, since it's small and on the move.
+      // Wider than its body: it's small and moving.
       if (Math.hypot(x - b.x, y - b.y - b.bob) > Math.max(b.size * 0.7, this.garden.cell * 3)) continue;
       if (cover.hidden(x, y, 2, b.z) > 0.5 || (hit && hit.z > b.z)) continue;
       hit = b;
@@ -210,12 +201,11 @@ export class Insects {
     this.next = 0;
   }
 
-  /** Depth of the next thing to paint, or Infinity once everything is painted. */
+  /** Depth of the next part to paint; Infinity when done. */
   get nextDepth() {
     return this.next < this.parts.length ? this.parts[this.next].z : Infinity;
   }
 
-  /** Paints the next thing from beginPaint. */
   paintNext(ctx: CanvasRenderingContext2D) {
     const { settings, time } = this.garden;
     const shade = settings.shade.depth;
@@ -255,7 +245,6 @@ export class Insects {
         break;
       }
       case "hovering": {
-        // Drifts about by the flower, facing it, while it looks it over.
         const p = perch(b.stem!);
         const [hx, hy, hz] = this.hoverSpot(b, p);
         const [p1, p2, p3] = b.wobble;
@@ -266,7 +255,7 @@ export class Insects {
         face = this.toward(b, p);
         b.timer -= dt;
         if (b.timer <= 0) {
-          // The plants have swayed since it picked the flower, and may hide it now.
+          // Plants may have swayed over the flower since it was picked.
           if (Math.random() < style.skip || this.hiddenNow(b)) this.takeOff(b);
           else b.phase = "alighting";
         }
@@ -281,7 +270,6 @@ export class Insects {
         break;
       }
       case "landed": {
-        // Settles in over a moment, then holds on as the flower sways.
         const p = perch(b.stem!);
         b.x = ease(b.x, p.x, 0.15, dt);
         b.y = ease(b.y, p.y, 0.15, dt);
@@ -304,14 +292,14 @@ export class Insects {
     if (b.phase !== "landed" && settings.trail.fade > 0) extend(b.trail, b.x, b.y + b.bob, b.z, this.garden.time);
   }
 
-  /** The flowers it mustn't pass through: the one it just left, and the one it's after. */
+  /** Flowers it mustn't pass through: `b.last` and the one it's after. */
   private flowers(b: Insect) {
     const list: Flower[] = b.last ? [b.last] : [];
     if (b.stem) list.push({ plant: b.plant!, stem: b.stem });
     return list;
   }
 
-  /** The way to `goal` that doesn't pass through the flower it's after or the one it just left: `goal` itself if nothing's in the way. */
+  /** Next waypoint to `goal` that avoids passing through `flowers(b)`. Returns `goal` itself if clear; callers test `to === goal`. */
   private route(b: Insect, goal: Goal) {
     let to = goal;
     for (const f of this.flowers(b)) to = this.around(b, f, to);
@@ -319,11 +307,9 @@ export class Insects {
   }
 
   /**
-   * The way to `goal` past the head of `f`, if getting there means crossing
-   * over to its other side in depth. Over the head, it holds its depth and
-   * makes for the goal, or for the head's edge on its own side if the goal is
-   * over the head too. Clear of the head, it comes round onto the goal's side
-   * by the edge before going in.
+   * Waypoint to `goal` when that crosses `f`'s depth. While over `f`'s head it
+   * keeps its depth. If `goal` is over the head too, it goes via the head's
+   * edge, switching to the goal's side of `f` there.
    */
   private around(b: Insect, f: Flower, goal: Goal): Goal {
     const [gx, gy, gz] = goal;
@@ -332,14 +318,14 @@ export class Insects {
     const reach = b.size * REACH;
     const over = clearOf(f.stem, b.x, b.y) < reach;
     if (clearOf(f.stem, gx, gy) >= reach) return over ? [gx, gy, b.z] : goal;
-    // Out from the middle of the head the way it's off it, leaning toward the goal: just taken off, it's right on the middle.
+    // Out from the head's middle toward `b`, biased toward the goal, since just after takeoff `b` is on the middle.
     const p = perch(f.stem);
     const [ex, ey] = beside(f.stem, b.x - p.x + 0.5 * (gx - p.x), b.y - p.y + 0.5 * (gy - p.y), reach + b.size * 0.6, b.side);
     const d = f.plant.depth;
     return [ex, ey, over ? b.z : front ? d + AHEAD : d - AHEAD];
   }
 
-  /** Keeps it on the side it was on, at depth `z`, of the flower it's after and the one it just left, while it's over their heads. */
+  /** While `b` is over a head in `flowers(b)`, keeps it on the side it was on at depth `z`, from before this step. */
   private holdSide(b: Insect, z: number) {
     for (const f of this.flowers(b)) {
       const front = inFront(z, f.plant);
@@ -349,14 +335,14 @@ export class Insects {
     }
   }
 
-  /** Whether plants nearer than `plant` hide too much of where `b` would sit on `stem`, going by the cover map as last painted. */
+  /** Whether plants nearer than `plant` hide more than `HIDDEN` of `b`'s perch on `stem`, per `cover` as last painted. */
   private hides(b: Insect, plant: Plant, stem: Stem) {
     const p = perch(stem);
-    // About where its body is once it's standing on the flower.
+    // About where its body is when perched.
     return this.cover.hidden(p.x, p.y - b.size * 0.25, b.size * REACH, plant.depth) > HIDDEN;
   }
 
-  /** Whether the flower it's after is hidden now. */
+  /** Whether the flower it's after is hidden, repainting `cover` first. */
   private hiddenNow(b: Insect) {
     this.cover.paint(this.garden);
     return this.hides(b, b.plant!, b.stem!);
@@ -369,12 +355,11 @@ export class Insects {
     b.vx = b.vy = b.vz = 0;
     b.ax = b.ay = b.az = 0;
     b.last = null;
-    // Settles side on, give or take, whichever way it was facing.
+    // Rests within 0.5 rad of side-on, toward whichever side it faced.
     const side = Math.cos(b.yaw) < 0 ? Math.PI : 0;
     b.rest = side + clamp(wrap(b.yaw - side), -0.5, 0.5);
   }
 
-  /** Off its flower and on to the next, or away. */
   private takeOff(b: Insect) {
     const lift = GROUPS[b.kind].flight.cruise * b.size * 0.4;
     b.last = { plant: b.plant!, stem: b.stem! };
@@ -382,7 +367,7 @@ export class Insects {
     b.vy = -lift;
   }
 
-  /** Heads for another flower if it has visits left and there's one to go to, or else off screen; across to the far side if it only just came in by `from`. */
+  /** Heads for its next flower, or leaves if out of visits or flowers: by the far side if it just came in by `from`. */
   private moveOn(b: Insect, from?: Edge) {
     const target = b.visits > 0 ? this.pickFlower(b) : null;
     if (!target) return this.leave(b, from && (from === "left" ? "right" : from === "right" ? "left" : b.x < this.garden.width / 2 ? "right" : "left"));
@@ -404,19 +389,18 @@ export class Insects {
     b.zGoal = Math.random();
   }
 
-  /** Where a hovering insect waits: a little above its flower, on the side it came from, and a little in front. */
+  /** Where it hovers: above its flower at `p`, on `b.side`, a little in front. */
   private hoverSpot(b: Insect, p: { x: number; y: number }) {
     return [p.x + b.side * b.size * 0.9, p.y - b.size * 0.6, b.plant!.depth + 0.04] as const;
   }
 
-  /** Which way to face to look at its flower at `p`, px across and toward the viewer; none once it's almost there. */
+  /** Direction to its flower at `p`, px across and toward the viewer; undefined when almost there. */
   private toward(b: Insect, p: { x: number; y: number }): [number, number] | undefined {
     const dx = p.x - b.x;
     const dz = (b.plant!.depth - b.z) * b.size * DEPTH;
     return Math.hypot(dx, dz) > b.size * 0.3 ? [dx, dz] : undefined;
   }
 
-  /** Whether it has left the screen for good. */
   private gone(b: Insect) {
     const m = b.size * 1.6;
     const { width, height } = this.garden;
@@ -424,9 +408,8 @@ export class Insects {
   }
 
   /**
-   * A flower for `b` to visit, by its kind's taste: one on screen that nearer
-   * plants don't hide, not the one it's on, rarely one another insect is
-   * after, and more likely one nearby or toward the front.
+   * A random on-screen, unhidden flower other than its own, weighted by its kind's
+   * `likes`, closeness and nearness to the front; 20x rarer if another insect is after it.
    */
   private pickFlower(b: Insect): Flower | null {
     const { width: W, height: H } = this.garden;
@@ -461,14 +444,14 @@ export class Insects {
     return r < 0.4 ? "left" : r < 0.75 ? "right" : "top";
   }
 
-  /** A point `out` px beyond one edge of the screen, in the upper part of the sides. */
+  /** A random point `out` px past `edge`; on a side, 8% to 60% of the way down. */
   private offEdge(edge: Edge, out: number): [number, number] {
     const { width: W, height: H } = this.garden;
     if (edge === "top") return [W * lerp(0.15, 1, Math.random()), -out];
     return [edge === "left" ? -out : W + out, H * lerp(0.08, 0.6, Math.random())];
   }
 
-  /** Seconds until the next one is due: on average the settings' `every`, never all at once nor an age apart. */
+  /** Seconds to the next arrival: exponential with mean `every`, clamped to 0.3 to 2.5 times it. */
   private gap() {
     return this.garden.settings.insects.every * clamp(-Math.log(1 - Math.random()), 0.3, 2.5);
   }
@@ -479,7 +462,7 @@ function inFront(z: number, plant: Plant) {
   return z + ON_TOP / 2 >= plant.depth;
 }
 
-/** An index into `odds`, picked by them. */
+/** A random index into `odds`, weighted by them. */
 function pick(odds: readonly number[]) {
   let r = Math.random() * odds.reduce((a, b) => a + b, 0);
   for (let i = 0; i < odds.length; i++) {

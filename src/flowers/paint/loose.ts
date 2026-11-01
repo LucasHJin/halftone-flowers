@@ -1,20 +1,9 @@
 /**
- * Single petals as they look once they've come loose, each drawn like the ones
- * still on its kind of head and taken from that flower's own: its inks and
- * blush, how long that petal was, how many it had, and whatever marks it
- * carries (a poppy's blotch, the beard on an iris fall, a foxglove's dark
- * mouth). Spikes, clusters
- * and plumes shed whole florets or pairs of hairs instead.
- *
- * Each is drawn about its middle, its base toward -x and its tip toward +x.
- * Seen alone and small, a loose petal is drawn a little bigger than on its
- * flower, and never so small that its shape is lost among the dots. A spike's
- * florets and a plume's hairs are fine parts of a long, thin flower, so they
- * come off as they were on it, only a little bigger, their sides lit as they
- * were there.
- *
- * Petals are told apart by the index each is drawn at on its head, which is
- * what a head's `lost` holds once they're shaken off.
+ * Loose petals, drawn like those on their kind of head in that flower's inks
+ * and marks (a poppy's blotch, an iris fall's beard). Spikes, clusters and
+ * plumes shed whole florets or pairs of hairs. Each is drawn about its middle,
+ * base toward -x, a little bigger than on its flower so its shape survives the
+ * halftone. Petals are keyed by the index their head draws them at, as in a head's `lost`.
  */
 import { lerp, TAU } from "../../utils/math.js";
 import { SEGMENTS } from "../stem.js";
@@ -27,36 +16,36 @@ import { hairPair, HAIR_STEPS, SWEEP } from "./heads/plume.js";
 import { BELL_HANG, BELL_TURN, bellSide, spikeFloret } from "./heads/spike.js";
 import { along, blob, lightStrength, litBy, tone } from "./tone.js";
 
-/** Paints a loose petal moved `by` along the ramp, for which side of it faces you. */
+/** Paints a loose petal, its inks moved `by` along the ramp (toward dark if positive) for which side faces you. */
 export type LoosePaint = (ctx: CanvasRenderingContext2D, by: number) => void;
 
 export interface LooseLook {
   paint: LoosePaint;
   /** Px across its longest way. */
   length: number;
-  /** How many times bigger it's drawn than it was on its flower. */
+  /** How many times bigger it's drawn than on its flower. */
   scale: number;
 }
 
-/** Turns a petal `length` by `width` px on its flower into the size it's drawn loose, at least `least` dots long and `wide` across; 0 for just a little bigger. */
+/** Loose [length, width] of a `length` × `width` px petal, aiming for `least` cells long and `wide` across; `least` 0 only scales by `EXAGGERATE`. */
 type Fit = (length: number, width: number, least?: number, wide?: number) => [number, number];
 
-/** How much bigger than on its flower a loose petal is drawn, at least; small ones are drawn bigger still to reach their fewest dots long. */
+/** Least a loose petal is scaled up from its size on its flower; small ones go further to reach `least` cells. */
 const EXAGGERATE = 1.15;
 
-/** Most times bigger than on its flower a loose petal is drawn, so one off a small flower isn't out of all proportion to it. */
+/** Most a loose petal is scaled up, so one off a small flower stays in proportion to it. */
 const MOST_GROWN = 1.8;
 
-/** Fewest dots across a loose petal, so its outline still shows, unless that would make it as wide as it's long. */
+/** Default fewest cells across a loose petal, so its outline shows; capped at 0.45 of its length. */
 const MIN_WIDE = 1.8;
 
-/** How many of a plume's hairs lie over each other along it. */
+/** Plume hairs lie about this many deep, so a loose pair is stroked this much thicker to print as dark. */
 const OVERLAP = 3;
 
-/** Petal `k` of the head on `s` as it looks loose, `size` times as big as it would otherwise be. */
+/** Petal `k` of the head on `s` as drawn loose, `size` times its usual loose size. */
 export function looseLook(s: Stem, h: Head, k: number, cell: number, size: number): LooseLook {
   let scale = 1;
-  // Bigger than on the flower, and if it can be without growing out of proportion, at least `least` dots long and `wide` across.
+  // Sets `scale` as a side effect, read once `shapeOf` returns; each shape calls it exactly once.
   const fit: Fit = (length, width, least = 4.5, wide = MIN_WIDE) => {
     scale = size * Math.min(MOST_GROWN, Math.max(EXAGGERATE, (cell * least) / length));
     const L = length * scale;
@@ -77,19 +66,18 @@ function shapeOf(s: Stem, h: Head, k: number, cell: number, fit: Fit): Omit<Loos
 
   switch (h.kind) {
     case "daisy": {
-      // A long, narrow ray, blunt at the tip; the more rays the daisy has, the narrower each.
+      // A long, narrow, blunt-tipped ray; narrower the more rays.
       const [L, W] = fit(R * 0.95 * jitter, 2 * R * Math.min(0.11, 1.25 / h.petals), 6, 1.1);
       const b = blade(L, W, side * lerp(0, 0.35, rand()), [0.12, 0.2]);
       return { length: L, paint: (ctx, by) => fill(ctx, b.path, ribFill(ctx, b.rib, h.ink, amount, by, base)) };
     }
     case "cosmos": {
-      // A broad wedge, its tip cut into three teeth; broader on a cosmos with fewer petals.
       const [L, W] = fit(R * 0.9 * jitter, R * (h.petals > 8 ? 0.48 : 0.56));
       const path = toothed(L, W / 2);
       return { length: L, paint: (ctx, by) => fill(ctx, path, ribFill(ctx, [-L / 2, 0, L / 2, 0], h.ink, amount, by, base)) };
     }
     case "lily": {
-      // Long and pointed, curving back at the tip, with a stripe down the middle in its stamens' ink. The inner three are shorter.
+      // Long and pointed, curving back at the tip, striped down the middle in its stamens' ink. The inner three are shorter.
       const [L, W] = fit(R * (Math.floor((k * 2) / h.petals) ? 0.82 : 1) * jitter, R * 0.46, 6);
       const b = blade(L, W, side * lerp(0.3, 0.7, rand()), [0.5, 0.9]);
       const stripe: Ink = h.centre === 2 ? 1 : h.centre;
@@ -108,7 +96,7 @@ function shapeOf(s: Stem, h: Head, k: number, cell: number, fit: Fit): Omit<Loos
       return { length: L, paint: (ctx, by) => fill(ctx, b.path, ribFill(ctx, b.rib, h.ink, amount, by)) };
     }
     case "daffodil": {
-      // Broad, drawn out to a sharp point, with a paler crease down the middle; the inner three a little narrower and shorter.
+      // Broad and sharp-pointed, with a paler crease down the middle; the inner three (odd `k`) narrower and shorter.
       const inner = k % 2 === 1;
       const [L, W] = fit(R * (inner ? 0.9 : 1) * jitter, R * (inner ? 0.52 : 0.6));
       const b = blade(L, W, side * lerp(0.1, 0.4, rand()), [0.4, 1.3]);
@@ -127,7 +115,7 @@ function shapeOf(s: Stem, h: Head, k: number, cell: number, fit: Fit): Omit<Loos
         const b = blade(L, W, side * lerp(0.7, 1.1, rand()), [0.6, 0.45], 0.25);
         return { length: L, paint: (ctx, by) => fill(ctx, b.path, ribFill(ctx, b.rib, h.ink, amount, by)) };
       }
-      // A fall, in the centre's ink, arching over, with the beard along the top of it in a contrasting ink.
+      // A fall: arching, in the centre's ink, with the beard along its top in a contrasting ink.
       const [L, W] = fit(R * 1.3 * jitter, R * 0.64, 6);
       const b = blade(L, W, side * lerp(1.2, 1.7, rand()), [0.75, 0.4], 0.08);
       const beard: Ink = h.centre === 2 ? 0 : 2;
@@ -140,7 +128,7 @@ function shapeOf(s: Stem, h: Head, k: number, cell: number, fit: Fit): Omit<Loos
       };
     }
     case "poppy": {
-      // Broad, round and crinkled at the edge, with a blotch at the base in the centre's ink.
+      // Broad, round and crinkle-edged, with a blotch at the base in the centre's ink.
       const [L] = fit(R * 0.9 * jitter, R * 1.1);
       const crinkle = rand() * TAU;
       const path = fan(L, 1.3, (t) => rounded(t, 0.45) * (1 + 0.05 * Math.sin(11 * t + crinkle)));
@@ -154,7 +142,7 @@ function shapeOf(s: Stem, h: Head, k: number, cell: number, fit: Fit): Omit<Loos
       };
     }
     case "tulip": {
-      // Tall and cupped, coming to a point, shaded across as a bowl is, with a patch at the base in the ink of the cup's inside.
+      // Tall, cupped and pointed, shaded across like a bowl, with a patch at the base in the cup's inside ink.
       const [L, W] = fit(R * 1.35 * jitter, R * 0.8);
       const b = blade(L, W, side * lerp(0, 0.3, rand()), [0.45, 0.55]);
       const patch: Ink = h.centre === 2 ? 1 : h.centre;
@@ -189,7 +177,7 @@ function shapeOf(s: Stem, h: Head, k: number, cell: number, fit: Fit): Omit<Loos
       };
     }
     case "peony": {
-      // Big, cupped and ruffled into lobes, deep at the base and pale at the edge, as long and broad as its ring's.
+      // Cupped and ruffled into lobes, deep at the base and pale at the edge, sized as its ring's petals.
       const ring = ringOf(k);
       const [L] = fit(R * ring.length * jitter, R * ring.width);
       const ruffle = rand() * TAU;
@@ -197,13 +185,13 @@ function shapeOf(s: Stem, h: Head, k: number, cell: number, fit: Fit): Omit<Loos
       return { length: L, paint: (ctx, by) => fill(ctx, path, fanFill(ctx, L, h.ink, amount, by, h.ink, 0.1)) };
     }
     case "bud": {
-      // The tip of its furled petals, the only part of them that showed: narrow and pointed.
+      // The tip of its furled petals, the only part of them that showed.
       const [L, W] = fit(R * 0.55, R * 0.3);
       const b = blade(L, W, side * lerp(0, 0.3, rand()), [0.5, 0.6]);
       return { length: L, paint: (ctx, by) => fill(ctx, b.path, ribFill(ctx, b.rib, h.ink, amount, by)) };
     }
     case "cluster": {
-      // A whole floret: five round petals about a deeper eye, smaller off a fork.
+      // A whole floret: five round petals about a deeper eye.
       const size = florets(s, h, 0)[k].size;
       const [L] = fit(R * 0.4 * size, R * 0.4 * size, 4);
       const turn = rand() * TAU;
@@ -221,10 +209,10 @@ function shapeOf(s: Stem, h: Head, k: number, cell: number, fit: Fit): Omit<Loos
       };
     }
     case "spike": {
-      // Drawn as paintSpike draws it, x along the stem's right and -y up it, each side lit as the side of the stem it was on.
+      // In `paintSpike`'s frame: x toward the stem's right, -y up it, each side lit as the side of the stem it was on.
       const floret = spikeFloret(h, k);
       if (h.style === 1) {
-        // A foxglove bell, along x from where it hung to its dark mouth, lit as the side of the stem it hung on.
+        // A foxglove bell along x, from where it hung to its dark mouth.
         const [L] = fit(floret.size * 2.1, floret.size * 1.1, 0);
         const u = L / 2.1;
         const side = bellSide(k);
@@ -253,7 +241,7 @@ function shapeOf(s: Stem, h: Head, k: number, cell: number, fit: Fit): Omit<Loos
           },
         };
       }
-      // A lupine's pea flower: two wings, and the banner standing over them. On the spike they spread wide, stacking into its cone; alone, they close up round the banner, or the floret reads as a bar.
+      // A lupine's pea flower: two wings under the banner, closed up round it. Spread wide as on the spike, a lone floret reads as a bar.
       const [L] = fit(floret.size * 2.1, floret.size * 1.5, 0);
       const u = L / 2.1;
       return {
@@ -269,7 +257,7 @@ function shapeOf(s: Stem, h: Head, k: number, cell: number, fit: Fit): Omit<Loos
       };
     }
     case "plume": {
-      // A pair of its hairs, splayed from where they grew as they were on the plume and as pale. On the plume, hairs overlap a few deep, which is what prints; alone, they're drawn that much thicker, so they carry as much ink, and stay that fine however long.
+      // A pair of its hairs, splayed and as pale as on the plume; see `OVERLAP` for the stroke width.
       const pair = hairPair(h, k);
       const [L] = fit(pair.length, pair.length * Math.sin(pair.spread) * 2, 0);
       const hairs = new Path2D();
@@ -282,7 +270,7 @@ function shapeOf(s: Stem, h: Head, k: number, cell: number, fit: Fit): Omit<Loos
   }
 }
 
-/** The indices a head draws its petals at (or its florets, or its pairs of plume hairs), whether or not they've been shaken off. */
+/** Indices a head draws its petals at (or florets, or plume hair pairs), shed or not. */
 export function petalIndices(s: Stem, h: Head): number[] {
   const all = (n: number) => Array.from({ length: n }, (_, i) => i);
   switch (h.kind) {
@@ -295,7 +283,7 @@ export function petalIndices(s: Stem, h: Head): number[] {
     case "cluster":
       return all(florets(s, h, 0).length);
     case "spike":
-      // Lavender leaves gaps between its whorls (see paintSpike).
+      // Lavender leaves gaps between its whorls (see `paintSpike`).
       return all(h.petals).filter((i) => !(h.style === 2 && i % 2 === 1 && i < h.petals - 3));
     case "plume":
       return all(HAIR_STEPS + 1);
@@ -305,15 +293,14 @@ export function petalIndices(s: Stem, h: Head): number[] {
 }
 
 /**
- * Where the middle of petal `k` of the head on `s` is on screen as it's posed
- * at time `t`, which way its own x runs as looseLook draws it (`a`), and which
- * way it points out from the head (`out`), radians clockwise from rightward.
- * Near enough to where its head draws it for one to take over from the other.
+ * Screen position of petal `k`'s middle at time `t`, its x axis as `looseLook`
+ * draws it (`a`), and the way it points out from the head (`out`), radians
+ * clockwise from rightward. Must match the head painters closely for the hand-off.
  */
 export function petalAt(s: Stem, h: Head, k: number, t: number) {
   const R = h.radius;
   if (h.kind === "spike") {
-    // Where paintSpike draws it: nudged off the stem toward the stem's right, (cos p.a, sin p.a), by its drift, a bell hanging out from there.
+    // As `paintSpike` places it: moved `drift` floret sizes toward the stem's right (cos p.a, sin p.a); a bell hangs out from there.
     const floret = spikeFloret(h, k);
     const p = along(s, floret.along);
     const x = p.x + Math.cos(p.a) * h.drift[k] * floret.size;
@@ -325,13 +312,13 @@ export function petalAt(s: Stem, h: Head, k: number, t: number) {
     return { x: x - Math.sin(b) * hang, y: y + Math.cos(b) * hang, a: b + Math.PI / 2, out: p.a + (side > 0 ? 0 : Math.PI) };
   }
   if (h.kind === "plume") {
-    // Halfway along the pair of hairs, which reach up the stem, swept back. Every other pair is on the stem's left.
+    // Halfway along the pair, which reaches up the stem swept back by `SWEEP`. Pairs straddle the stem, so `out` alternates sides.
     const pair = hairPair(h, k);
     const p = along(s, pair.along);
     const up = p.a + SWEEP - Math.PI / 2;
     return { x: p.x + (Math.cos(up) * pair.length) / 2, y: p.y + (Math.sin(up) * pair.length) / 2, a: up, out: p.a + (k % 2 ? 0 : Math.PI) };
   }
-  // Where it is in the head's own frame at the top of the stem, and the middle it points out from.
+  // (x, y): its middle in the head's frame at the top of the stem; (cx, cy): the point it points out from.
   let x = 0;
   let y = 0;
   let cx = 0;
@@ -340,7 +327,7 @@ export function petalAt(s: Stem, h: Head, k: number, t: number) {
     case "daisy":
     case "cosmos":
     case "lily": {
-      // Halfway out along it, on the disc tilted as paintDisc tilts it.
+      // Halfway out along it, on the disc tilted as `paintDisc` tilts it.
       const n = h.petals;
       const ring = h.kind === "lily" ? Math.floor((k * 2) / n) : 0;
       const slot = h.kind === "lily" ? (k % (n / 2)) * 2 + ring : k;
@@ -392,7 +379,7 @@ export function petalAt(s: Stem, h: Head, k: number, t: number) {
       break;
     }
     case "bud": {
-      // Its tip, leaning the way the head is turned (see paintBud).
+      // Its tip, leaning the way the head is turned (see `paintBud`).
       const lean = -0.4 * Math.sin(h.turn);
       y = -0.85 * R * 1.1;
       x = lean * y;
@@ -408,7 +395,7 @@ export function petalAt(s: Stem, h: Head, k: number, t: number) {
   return { x: s.x[SEGMENTS] + x * cos - y * sin, y: s.y[SEGMENTS] + x * sin + y * cos, a, out: a };
 }
 
-/** The ring of a peony's petal `k` is in (see paintGlobe), with which ring it is and where in it the petal comes. */
+/** The `RINGS` entry peony petal `k` is in (see `paintGlobe`), plus its `index` and `k`'s place `at` in it. */
 function ringOf(k: number) {
   let at = k;
   let index = 0;
@@ -429,11 +416,7 @@ function stroke(ctx: CanvasRenderingContext2D, path: Path2D, style: string, widt
   ctx.stroke(path);
 }
 
-/**
- * Fill moved `by` along the ramp, deepest at the base and paler toward the
- * tip like the petals on the flower, from the first point of `rib` to its
- * last, blushing from `base` ink at the base.
- */
+/** Gradient along `rib`, base to tip: deepest at the base, in `base` ink, paling toward the tip; moved `by` along the ramp. */
 function ribFill(ctx: CanvasRenderingContext2D, rib: number[], ink: Ink, amount: number, by: number, base: Ink = ink) {
   const light = lightStrength();
   const n = rib.length;
@@ -444,7 +427,7 @@ function ribFill(ctx: CanvasRenderingContext2D, rib: number[], ink: Ink, amount:
   return g;
 }
 
-/** The same for a petal fanning out from a base `L` / 2 px back from its middle, `deep` deepening the base and paling the edge further. */
+/** `ribFill` for a `fan`, radial from its base `L` / 2 px behind its middle; `deep` deepens the base and pales the edge further. */
 function fanFill(ctx: CanvasRenderingContext2D, L: number, ink: Ink, amount: number, by: number, base: Ink = ink, deep = 0) {
   const light = lightStrength();
   const g = ctx.createRadialGradient(-L / 2, 0, 0, -L / 2, 0, L);
@@ -455,11 +438,9 @@ function fanFill(ctx: CanvasRenderingContext2D, L: number, ink: Ink, amount: num
 }
 
 /**
- * A petal along a midrib `L` px long that turns `bend` radians from base to
- * tip, up to `W` px across. It widens from its base and narrows to its tip as
- * `taper` says (low is blunt, 1 pointed), and its edges ripple by `ruffle` of
- * the width toward the tip. Returns its outline, and its midrib as x, y pairs
- * from base to tip, both about the middle of the line from base to tip.
+ * A petal on a midrib `L` px long bending `bend` radians, `W` px at its widest, half-width
+ * going as t^p (1 - t)^q (low `q` is blunt), edges rippled by `ruffle` toward the tip.
+ * Outline and midrib (x, y pairs, base to tip) are centred on the base-tip midpoint.
  */
 function blade(L: number, W: number, bend: number, [p, q]: [number, number], ruffle = 0) {
   const n = 20;
@@ -504,9 +485,8 @@ function ribPath(rib: number[], from: number, to: number) {
 }
 
 /**
- * A petal fanning out from a narrow base `L` / 2 px back from its middle: its
- * edge is `L` × `r(t)` px out from the base at `t` × `spread` radians off
- * straight out, for `t` from -1 to 1.
+ * A petal fanning from a base `L` / 2 px behind its middle: its edge is `L` × `r(t)`
+ * px from the base at `t` × `spread` radians off straight out, `t` from -1 to 1.
  */
 function fan(L: number, spread: number, r: (t: number) => number) {
   const path = new Path2D();
@@ -529,7 +509,7 @@ function fanEdge(L: number, spread: number, r: (t: number) => number, upto: numb
   return path;
 }
 
-/** A fan's reach at `t`: all the way straight out, rounding down to under a third at the sides, sooner the higher `e`. */
+/** A fan's reach at `t`: 1 straight out, falling to 0.28 at the sides, sooner the higher `e`. */
 function rounded(t: number, e: number) {
   return 0.28 + 0.72 * Math.cos((t * Math.PI) / 2) ** e;
 }

@@ -1,4 +1,4 @@
-/** Where on the colour ramp a part starts, before its plant's shade moves it: 0 the middle (main ink), 1 the dark end, 2 the light end. */
+/** Place on the colour ramp before the plant's shade moves it: 0 middle (main ink), 1 dark end, 2 light end. */
 export type Ink = 0 | 1 | 2;
 
 export type Kind =
@@ -23,11 +23,11 @@ export interface Head {
   kind: Kind;
   /** Petal length for open flowers; floret size for spikes; spread for clusters. */
   radius: number;
-  /** Petals, florets or pedicels, depending on the kind. */
+  /** Count of petals, florets or pedicels, by kind. */
   petals: number;
   /** How open the face looks: 1 faces you, near 0 is side-on. */
   face: number;
-  /** Rotation of the petal ring. */
+  /** Rotation of the petal ring, radians. */
   spin: number;
   /** Radians the face is turned about the stem, toward the head's right if positive. */
   turn: number;
@@ -37,7 +37,7 @@ export interface Head {
   /** White petals that blush toward `centre` at the base. */
   blush: boolean;
   tone: number;
-  /** Per-petal length variation, one per petal. */
+  /** Length multiplier for each petal. */
   jitter: number[];
   /** Per-petal shift off even spacing, as a share of the gap between petals. */
   drift: number[];
@@ -47,7 +47,7 @@ export interface Head {
   style: number;
   /** The petals, florets or plume hairs shaken off it, by the index each is drawn at. */
   lost: Set<number>;
-  /** Those of them still coming off, by the same index: how much each still shows on it, fading from 1 to 0. */
+  /** Of `lost`, those still fading off, by the same index: how much each still shows, 1 down to 0. */
   leaving: Map<number, number>;
 }
 
@@ -71,7 +71,7 @@ export interface Stem {
   segment: number;
   /** Rest direction of each segment, radians clockwise from straight up. */
   rest: Float32Array;
-  /** Current direction of each segment, and the joints it produces (one more than segments). */
+  /** Current direction of each segment, radians. `x` and `y` hold the joints, one more than segments. */
   angle: Float32Array;
   x: Float32Array;
   y: Float32Array;
@@ -85,7 +85,7 @@ export interface Stem {
   omega: number;
   bend: number;
   bendVel: number;
-  /** Extra wind the pointer stirred up brushing past, fading over a few seconds. */
+  /** Extra wind the pointer stirred up brushing past; decays per `cursor.fade`. */
   gust: number;
   /** How much of that gust has reached the stem so far. */
   breeze: number;
@@ -103,7 +103,7 @@ export interface Plant {
   depth: number;
   /** The main stem first, then its branches. */
   stems: Stem[];
-  /** How it grows in when the bed first appears, or null if it was there from the start. */
+  /** Grow-in timing, or null if it was there from the start. */
   spawn: Spawn | null;
 }
 

@@ -1,8 +1,6 @@
 /**
- * Insects are modelled in 3D and drawn flat. A Pose turns points in an
- * insect's own frame, in multiples of its size, into px on screen. Its frame
- * is x forward, y up and z out to its right; the screen's is x right, y down
- * and z toward the viewer, who looks on from a little above.
+ * Insects are modelled in 3D. A `Pose` maps points in an insect's frame (x forward,
+ * y up, z to its right, in sizes) to screen px (x right, y down, z toward the viewer).
  */
 import { TAU } from "../../utils/math.js";
 import { acrossLight, lightStrength, tone } from "../paint/tone.js";
@@ -11,7 +9,7 @@ import type { Insect } from "./insect.js";
 
 export type Vec = [number, number, number];
 
-/** Toward the light on screen, as for the flowers: the upper left, and a little toward the viewer. */
+/** Direction to the light in screen axes, as for the flowers: upper left, a little toward the viewer. */
 const LIGHT: Vec = [-0.53, -0.71, 0.45];
 const LIGHT_2D: [number, number] = [-0.6, -0.8];
 
@@ -20,16 +18,15 @@ export class Pose {
   private axes: [Vec, Vec, Vec];
 
   /**
-   * Turned `yaw` radians from facing right toward facing the viewer, nose up
-   * `pitch`, banked `roll` with its right side down, `s` px to its size, and
-   * seen from `view` radians above.
+   * Radians: `yaw` from facing right toward the viewer, `pitch` nose up, `roll`
+   * right side down, `view` looking down from above. `s` is px per size.
    */
   constructor(yaw: number, pitch: number, roll: number, readonly s: number, view: number) {
     const turn = (v: Vec) => rotate(v, yaw, pitch, roll, view).map((c) => c * s) as Vec;
     this.axes = [turn([1, 0, 0]), turn([0, 1, 0]), turn([0, 0, 1])];
   }
 
-  /** Where `p` in the insect's frame lands: px right, px down and px toward the viewer from its middle. */
+  /** Where `p` in the insect's frame lands: px right, down and toward the viewer from its middle. */
   at([x, y, z]: Vec): Vec {
     const [f, u, r] = this.axes;
     return [f[0] * x + u[0] * y + r[0] * z, f[1] * x + u[1] * y + r[1] * z, f[2] * x + u[2] * y + r[2] * z];
@@ -71,8 +68,8 @@ function rotate([x, y, z]: Vec, yaw: number, pitch: number, roll: number, view: 
 }
 
 /**
- * How `b` looks now, `s` px to its size, held its own way: turned a little
- * more toward the viewer or away, whichever way it's going, and drifting.
+ * `b`'s pose at `s` px per size, plus its quirks. The turn toward the viewer is
+ * scaled by cos(yaw) so it works facing left or right, and drifts by up to 0.2 rad.
  */
 export function posed(b: Insect, s: number) {
   const { pitch, roll, turn, view } = b.quirks;
@@ -80,7 +77,7 @@ export function posed(b: Insect, s: number) {
   return new Pose(b.yaw + toward * Math.cos(b.yaw), b.pitch + pitch, b.roll + roll, s, view);
 }
 
-/** Something to paint, and how near the viewer it is; parts are painted far to near. */
+/** `z` is nearness to the viewer; `paintParts` paints far to near. */
 export interface Part {
   z: number;
   paint(): void;
@@ -91,7 +88,7 @@ export function paintParts(parts: Part[]) {
   for (const part of parts) part.paint();
 }
 
-/** One cross-section of a round body: its middle in the insect's frame, its radius, and its ink moved `by` along the ramp. */
+/** A cross-section of a round body: its middle in the insect's frame, its radius in sizes, and its ink moved `by` along the ramp. */
 export interface Section {
   at: Vec;
   r: number;
@@ -100,9 +97,8 @@ export interface Section {
 }
 
 /**
- * Adds a round body through `sections`, in order along it, as a stack of
- * discs across it, each the ellipse it looks from here. Painted far to near,
- * the nearest disc over any spot is the body's surface there.
+ * Adds a round body as one disc per section, in order along it, each drawn as
+ * the ellipse it projects to. Painted far to near, they read as a solid surface.
  */
 export function addBody(parts: Part[], ctx: CanvasRenderingContext2D, pose: Pose, sections: Section[]) {
   const centres = sections.map((sec) => pose.at(sec.at));

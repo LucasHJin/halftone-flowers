@@ -1,6 +1,6 @@
 import type { Kind, LeafShape } from "./types.js";
 
-/** What one kind of flower looks like. Ranges are picked from per flower. */
+/** How one kind of flower looks. Each flower picks its own value from each range. */
 export interface Species {
   /** Head size, as a multiple of the base flower size. */
   size: [number, number];
@@ -10,7 +10,7 @@ export interface Species {
   stem: number;
   /** How far the wind bends it, as a multiplier. */
   flex: number;
-  /** How much further right the top of the stem leans than the line from root to head, radians. */
+  /** How far right of the root-to-head line the top of the stem leans, radians. */
   lean: [number, number];
   /** Fewest and most leaves on the main stem. */
   leaves: [number, number];
@@ -27,7 +27,7 @@ export interface Species {
   branches: boolean;
 }
 
-/** What each kind looks like by default. */
+/** Default look of each kind. */
 export const SPECIES: Record<Kind, Species> = {
   cosmos: { size: [0.8, 1.2], inks: [5, 2, 3], stem: 1, flex: 1, lean: [0.1, 0.45], leaves: [0, 2], leaf: "lance", face: [0.25, 1], turn: 0.35, drift: 0.12, ragged: 0.18, branches: true },
   daisy: { size: [0.5, 0.8], inks: [2, 0, 8], stem: 0.8, flex: 1.1, lean: [0.05, 0.35], leaves: [0, 1], leaf: "lance", face: [0.35, 1], turn: 0.35, drift: 0.2, ragged: 0.22, branches: true },

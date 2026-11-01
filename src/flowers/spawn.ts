@@ -1,14 +1,11 @@
 /**
- * The bed grows in when it first appears: each plant from the ground up, a few
- * at a time spreading out from the corner, each diamond growing into its dot
- * with a slight pop. Every plant is in within the spawn's duration of the
- * first starting.
+ * Grows the bed in: each plant from the ground up, spreading out from the
+ * corner, each diamond popping into its dot.
  *
- * The halftone only knows dots, so the timing reaches it through a mask: each
- * plant is painted again in one flat colour, red for when its front crosses
- * the bottom of the screen, green for how fast it climbs, and blue for
- * coverage. From that and its own height, a diamond works out how far it has
- * grown.
+ * The halftone only sees dots, so timing reaches it through a mask: each plant
+ * painted in one flat colour, red for when its front crosses the bottom of the
+ * screen, green for its climb pace, blue for coverage. Each diamond works out
+ * its growth from that and its own height.
  */
 import { clamp, createRandom, lerp } from "../utils/math.js";
 import type { DotScale } from "../halftone/index.js";
@@ -27,14 +24,13 @@ export interface SpawnPlan {
   /** Fastest and slowest climb, as logs of seconds per px. */
   pace: [number, number];
   /**
-   * How far each dot has got through its pop, by lattice position. Dots only
-   * move forward, so where a later plant's front passes over one already in,
-   * it stays in instead of shrinking away and popping in again.
+   * Each dot's progress through its pop, by lattice position. Only ever rises,
+   * so a later plant's front passing over a grown dot doesn't pop it again.
    */
   grown: Map<number, number>;
 }
 
-/** Gives each plant its start and climbing pace. Call once the plants are posed. */
+/** Sets each plant's `spawn`. Call after the plants are posed. */
 export function planSpawn(plants: Plant[], width: number, height: number, seed: number, settings: SpawnSettings): SpawnPlan {
   const { duration, grow, scatter, climb, order } = settings;
   // Its own sequence, so the same seed grows the same bed whether or not it spawns.
@@ -71,13 +67,13 @@ export function planSpawn(plants: Plant[], width: number, height: number, seed: 
   return { end, grow, scatter, latest: latest || 1, pace: [fastest - 0.01, slowest + 0.01], grown: new Map() };
 }
 
-/** Where a plant's front is `elapsed` seconds in: nothing above it has started growing. */
+/** Screen y of a plant's front `elapsed` seconds in; nothing above it has started growing. */
 export function spawnFront(plant: Plant, elapsed: number, height: number) {
   const s = plant.spawn;
   return s ? height - (elapsed - s.bottom) / s.pace : -Infinity;
 }
 
-/** The flat colour a plant is painted in for the spawn mask. */
+/** A plant's flat colour in the spawn mask. */
 export function spawnColor(plant: Plant, plan: SpawnPlan) {
   const s = plant.spawn!;
   const [lo, hi] = plan.pace;
@@ -102,7 +98,7 @@ export function spawnScale(plan: SpawnPlan, elapsed: number, height: number): Do
   };
 }
 
-/** From 0 to 1, overshooting to about 1.1 on the way, so each dot pops into place. */
+/** Eases 0 to 1, overshooting to about 1.1, so each dot pops in. */
 function pop(t: number) {
   const u = t - 1;
   return 1 + 2.7 * u * u * u + 1.7 * u * u;

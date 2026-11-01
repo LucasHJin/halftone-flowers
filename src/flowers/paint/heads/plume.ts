@@ -2,17 +2,13 @@ import { lerp } from "../../../utils/math.js";
 import type { Head, Stem } from "../../types.js";
 import { along, tone } from "../tone.js";
 
-/** Steps up a plume between its pairs of hairs, so it has one more pair than this. */
+/** Gaps between a plume's hair pairs; it has `HAIR_STEPS + 1` pairs. */
 export const HAIR_STEPS = 24;
 
 /** How far a plume's hairs are swept back from straight up the stem, radians. */
 export const SWEEP = 0.25;
 
-/**
- * Pair `i` of a plume's hairs: where it grows along the stem, how long its
- * hairs are, how far they splay either way from the middle, radians, how wide
- * they are, and how much ink they take. Every other pair is paler.
- */
+/** Pair `i` of a plume's hairs. `along` is a stem fraction, `spread` radians each side of the middle. Every other pair is paler. */
 export function hairPair(h: Head, i: number) {
   const k = i / HAIR_STEPS;
   return {

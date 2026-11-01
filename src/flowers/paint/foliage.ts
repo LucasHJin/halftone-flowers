@@ -3,7 +3,6 @@ import { SEGMENTS } from "../stem.js";
 import type { Leaf, Stem } from "../types.js";
 import { tone } from "./tone.js";
 
-/** A tapering ribbon along the stem's joints. */
 export function paintStem(ctx: CanvasRenderingContext2D, s: Stem) {
   ctx.beginPath();
   for (let side = -1; side <= 1; side += 2) {
@@ -27,7 +26,7 @@ export function paintLeaf(ctx: CanvasRenderingContext2D, s: Stem, leaf: Leaf, t:
   const dir = s.angle[leaf.at] + leaf.side * leaf.spread + 0.07 * Math.sin(t * 1.9 + leaf.phase);
   const L = leaf.length;
   const W = leaf.width;
-  // Leaves droop toward the ground, whichever side they grow on; long straps arch over most.
+  // Droops toward the ground on either side; straps arch over most.
   const droop = (leaf.shape === "strap" ? 0.45 : 0.25) * Math.sin(dir) * L;
   const fat = leaf.shape === "oval" ? 1.25 : 1;
   ctx.save();

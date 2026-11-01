@@ -1,13 +1,6 @@
 /**
- * Butterflies. Each beat claps the wings together over the back and sweeps
- * them down past level; the body rises and pitches up as they come down and
- * sinks as they go back up. They never stop beating in the air, and beat
- * harder climbing or hanging by a flower than cruising. They often flutter
- * about by a flower before settling on it or moving on, and on a flower hold
- * their wings shut upright, opening them slowly now and then to bask.
- *
- * Each is one of a few real species, told apart by the shape of its wings,
- * their size against its body, and their markings.
+ * Butterflies. In flight each beat claps the wings over the back and sweeps them
+ * down past level; perched, the wings stay shut upright and open now and then to bask.
  */
 import { clamp, lerp, TAU } from "../../utils/math.js";
 import { tone } from "../paint/tone.js";
@@ -22,18 +15,18 @@ const BASKING = 0.12;
 const TOP = 1.45;
 const BOTTOM = -0.55;
 const DOWN = 0.42;
-/** Wing angle shut and opened wide on a flower. */
+/** Wing angle shut and fully open while perched, radians. */
 const SHUT = 1.5;
 const OPEN = 0.15;
 /** How far above the flower's middle the body sits, sizes. */
 const STAND = 0.12;
-/** The undersides of the wings print paler. */
+/** Ramp shift for wing undersides, so they print paler. */
 const UNDERSIDE = -0.18;
 
 /** Where the wings join the top of the thorax, in the butterfly's frame. */
 const HINGE: Vec = [0.04, 0.08, 0];
 
-/** Head, thorax and abdomen, head first, `girth` times as thick as the rest. */
+/** Head, thorax and abdomen sections, head first, radii scaled by `girth`. */
 function body(girth: number): Section[] {
   return (
     [
@@ -54,18 +47,18 @@ function body(girth: number): Section[] {
   ).map(([x, y, r]) => ({ at: [x, y, 0], r: r * girth, ink: 1, by: 0 }));
 }
 
-/** Traces the right wing of one pair laid flat, x out from the body and y back along it, in units of the butterfly's size. */
+/** Traces a right wing laid flat: x out from the body, y back along it, in butterfly sizes. */
 type Shape = (ctx: CanvasRenderingContext2D) => void;
 
 interface Butterfly extends Species {
-  /** How big its wings are against its body. */
+  /** Wing scale against the body. */
   wings: number;
   /** Multiple of its kind's wing beat: bigger wings beat slower. */
   beat: number;
   body: Section[];
   forewing: Shape;
   hindwing: Shape;
-  /** Paints its markings over one wing, `fore` or hind, clipped to `shape` and moved `by` along the ramp. */
+  /** Paints markings on one wing, already clipped to `shape`, moved `by` along the ramp. */
   mark(ctx: CanvasRenderingContext2D, shape: Shape, fore: boolean, by: number): void;
 }
 
@@ -251,7 +244,7 @@ const ADMIRAL: Butterfly = {
   forewing: NOTCHED,
   hindwing: ROUND,
   mark(ctx, shape, fore, by) {
-    // The red prints well toward the pale end, to stand out from the black.
+    // Red prints near the pale end so it stands out from the black.
     if (!fore) {
       // Red along the hindwing's edge.
       cover(ctx, 2, by + 0.15);
@@ -314,14 +307,14 @@ export const BUTTERFLY: InsectGroup = {
 
   animate(b, dt, rate) {
     b.air = ease(b.air, b.phase === "landed" ? 0 : 1, 0.2, dt);
-    // Climbing or hanging in the air takes more work than cruising level: deeper strokes, a little quicker.
+    // Climbing or hovering takes more work than cruising: deeper, slightly quicker strokes.
     const work = clamp(0.3 + 0.6 * climb(b, FLIGHT) + 0.3 * (1 - headway(b, FLIGHT)), 0, 1);
     const beat = BEAT * SPECIES[b.species].beat * b.quirks.pace * rate * lerp(0.9, 1.25, work);
     b.flap += TAU * lerp(BASKING, beat, b.air) * dt;
     const flying = lerp(BOTTOM * b.quirks.stroke * lerp(0.8, 1.3, work), TOP, stroke(b.flap));
     const basking = lerp(SHUT, OPEN, smoothstep(0.55, 1, 0.5 - 0.5 * Math.cos(b.flap)));
     b.wing = lerp(basking, flying, b.air);
-    // The body follows the wings a little behind: lifted by each downstroke and pitched up by it, sinking on the upstroke.
+    // Body lags the wings by 0.9 rad: lifts and pitches up on the downstroke, sinks on the upstroke.
     const after = (stroke(b.flap - 0.9) - 0.5) * b.air;
     b.bob = b.size * 0.16 * after;
     const pitch = lerp(0.12, 0.2 - 0.35 * after + 0.3 * climb(b, FLIGHT) - 0.2 * surge(b, FLIGHT), b.air);
@@ -339,11 +332,11 @@ export const BUTTERFLY: InsectGroup = {
     const sn = Math.sin(b.wing);
     for (const side of [-1, 1]) {
       const span: Vec = [0, sn, side * c];
-      // Each wing's root runs a little outward toward the back, so seen head on the wings aren't edge-on.
+      // Root angled outward toward the back, so head-on the wings aren't edge-on.
       const back: Vec = [-0.95, 0, side * 0.3 * c];
       const top = cross(span, back).map((v) => v * -side) as Vec;
       const shows = pose.shows(top);
-      // Shaded half as much as a flower, so the markings keep their contrast as the wings turn.
+      // Half a flower's shading, so markings keep their contrast as the wings turn.
       const by = 0.5 * pose.lit(top) + (shows ? 0 : UNDERSIDE);
       parts.push({
         z: pose.at(add(add(HINGE, span, 0.45 * sp.wings), back, 0.1))[2],
@@ -369,7 +362,7 @@ export const BUTTERFLY: InsectGroup = {
   },
 };
 
-/** How far up the wings are, from 0 at the bottom of the stroke to 1 clapped overhead, `flap` radians into the beat: swept down quickly, raised slower. */
+/** Wing height `flap` radians into the beat, 0 at the bottom to 1 clapped overhead; the downstroke takes `DOWN` of the beat. */
 function stroke(flap: number) {
   const f = (((flap / TAU) % 1) + 1) % 1;
   const down = f < DOWN;
@@ -378,7 +371,6 @@ function stroke(flap: number) {
   return down ? 1 - e : e;
 }
 
-/** One wing, `fore` or hind, in `sp`'s markings moved `by` along the ramp. */
 function wing(ctx: CanvasRenderingContext2D, sp: Butterfly, fore: boolean, by: number) {
   const shape = fore ? sp.forewing : sp.hindwing;
   shape(ctx);
@@ -388,7 +380,7 @@ function wing(ctx: CanvasRenderingContext2D, sp: Butterfly, fore: boolean, by: n
   ctx.restore();
 }
 
-/** Fills the whole of the wing clipped to. */
+/** Fills the whole clipped wing. */
 function cover(ctx: CanvasRenderingContext2D, ink: Ink, by: number) {
   ctx.fillStyle = tone(ink, 1, by);
   ctx.fillRect(-0.5, -1, 2, 2.5);

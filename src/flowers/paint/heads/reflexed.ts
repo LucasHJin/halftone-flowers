@@ -3,10 +3,7 @@ import type { Head } from "../../types.js";
 import { litBy, tone } from "../tone.js";
 import { fillPetal, headFrame, paintInDepth, petal, point, type Part } from "./petals.js";
 
-/**
- * Turk's cap lilies, hanging from a hooked stem: six narrow petals curled
- * right back toward the stem, with the stamens dangling out below.
- */
+/** Turk's cap lilies: six narrow petals curled back toward the stem, stamens dangling out of the face. */
 export function paintReflexed(ctx: CanvasRenderingContext2D, h: Head) {
   const R = h.radius;
   const f = headFrame(h.face, h.turn);
@@ -24,7 +21,7 @@ export function paintReflexed(ctx: CanvasRenderingContext2D, h: Head) {
       taper: [0.7, 0.8],
       cup: 0.4,
     });
-    // Nearer petals print darker and a shade deeper, so neighbours part.
+    // Nearer petals take more ink and print darker, so neighbours part.
     const near = clamp(p.z / R, -1, 1);
     const by = 0.08 * near + litBy(...p.normal);
     parts.push({

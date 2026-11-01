@@ -61,10 +61,8 @@ export function lightnessOf(colour: string) {
 }
 
 /**
- * `colour` turned to OKLCH `hue` in degrees, with its chroma times `vividness`
- * (0 grey). It keeps its OKLCH lightness, so it looks just as light whatever
- * the hue or vividness. Where a screen can't show that much chroma at this
- * lightness and hue, it takes the most the screen can.
+ * `colour` at OKLCH `hue` in degrees, with chroma times `vividness` (0 grey) and the same OKLCH
+ * lightness. Chroma is capped at the most the screen can show there.
  */
 export function withHue(colour: string, hue: number, vividness = 1) {
   const [L, A, B] = toLab(colour);
@@ -77,7 +75,7 @@ export function withLightness(colour: string, lightness: number) {
   return showable(Math.min(1, Math.max(0, lightness)), Math.atan2(B, A), Math.hypot(A, B));
 }
 
-/** The OKLCH colour (L, c, h radians), with c cut back to the most a screen can show at that lightness and hue. */
+/** OKLCH `L`, `h` (radians), `c` as hex, with `c` cut to the most the screen can show at that `L` and `h`. */
 function showable(L: number, h: number, c: number) {
   const at = (c: number): Lab => [L, c * Math.cos(h), c * Math.sin(h)];
   if (!inGamut(at(c))) {
@@ -92,7 +90,7 @@ function showable(L: number, h: number, c: number) {
   return fromLab(at(c));
 }
 
-/** `colour` on the opposite side of the OKLCH hue circle, just as light, and as vivid as the screen allows. */
+/** `colour` turned 180° in OKLCH hue, keeping its lightness and chroma (capped to what the screen can show). */
 export function opposite(colour: string) {
   return withHue(colour, hueOf(colour) + 180);
 }

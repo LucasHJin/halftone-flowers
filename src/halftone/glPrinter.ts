@@ -1,56 +1,54 @@
 /**
- * Prints the halftone's dots with WebGL2, on the GPU, the same as the canvas
- * printer in DiamondHalftone does on the CPU. Each frame the tone image goes
- * up as a texture, and three passes turn it into the picture:
+ * WebGL2 version of DiamondHalftone's canvas printer. Each frame uploads the
+ * tone image as a texture and runs three passes:
  *
- * 1. Dots: one pixel per diamond works out its dot as the canvas printer does,
- *    its size from the ink averaged over the diamond and the ordered dither,
- *    its shade, and which ramp it takes.
- * 2. Shapes: each pixel of the screen takes the dots whose shapes reach it,
- *    later shades over earlier ones, accent over main, antialiased.
- * 3. Ink: the shapes are blurred and cut back sharp on their alpha, then laid
- *    over the background, as the canvas printer's SVG filter does.
+ * 1. Dots: one px per diamond picks its size (averaged ink plus ordered
+ *    dither), shade and ramp, as the canvas printer does.
+ * 2. Shapes: each screen px draws the dots that reach it, later shades over
+ *    earlier, accent over main, antialiased.
+ * 3. Ink: blur, cut sharp on alpha, lay over the background, like the canvas
+ *    printer's SVG filter.
  */
 import { rgbOf } from "../utils/color.js";
 import { BAYER4 } from "./bayer.js";
 
-/** Everything one frame is printed from. Lengths are CSS px unless they say otherwise. */
+/** Lengths in CSS px unless noted. */
 export interface PrintFrame {
-  /** The tone image, `samples` px a side to each diamond. */
+  /** Tone image, `samples` px a side per diamond. */
   scene: HTMLCanvasElement;
   samples: number;
-  /** Each diamond's size multiplier, row by row, or null to leave them all as they are. */
+  /** Size multiplier per diamond, row by row; null leaves every dot unscaled. */
   scale: Float32Array | null;
-  /** Lattice index of the first diamond along each axis, and how many there are. */
+  /** Lattice index of the first diamond on each axis, and the diamond count. */
   origin: [number, number];
   count: [number, number];
-  /** Diamond width, and whether they sit in straight rows and columns rather than staggered ones. */
+  /** Diamond width; `straight` for straight rows and columns, else staggered. */
   cell: number;
   straight: boolean;
   dpr: number;
-  /** Dot sizes, smallest first, as a share of a full diamond, by area. */
+  /** Dot sizes, smallest first: each covers the area of a diamond this share of a full one wide. */
   sizes: number[];
-  /** 0 round, 1 square, 2 diamond; how far the shape reaches, as a share of a diamond's half-diagonal with the same area; and a diamond's curve. */
+  /** `shape` 0 round, 1 square, 2 diamond; `reach` from the centre, in half-diagonals of a same-area diamond; `curve` of a diamond's sides. */
   shape: number;
   reach: number;
   curve: number;
-  /** Shades of the main ramp and of the accent, the same number of each, and the background. */
+  /** Main and accent ramp shades, the same number of each. */
   palette: string[];
   accent: string[];
   background: string;
-  /** How far the ink spreads, in device px, and the slope and offset of the cut on its alpha. */
+  /** Ink spread in device px, and the slope and offset of the cut on its alpha. */
   blur: number;
   sharp: number;
   cut: number;
 }
 
-/** Room for this many dot sizes. */
+/** Length of `uSizes` in the dots shader. */
 const MAX_SIZES = 32;
 /** A dot's size goes in a byte as a share of this many half-diagonals. */
 const SIZE_RANGE = 2.5;
-/** The furthest the blur reaches, device px each way. */
+/** Furthest the blur reaches, device px each way. */
 const MAX_RADIUS = 64;
-/** Its samples each way, each between two px, so the GPU's filtering weighs the two together in one read. */
+/** Blur samples each way. Each sits between two px so linear filtering reads both in one fetch. */
 const MAX_TAPS = MAX_RADIUS / 2 + 1;
 
 const OPTIONS: WebGLContextAttributes = {
@@ -65,7 +63,7 @@ const OPTIONS: WebGLContextAttributes = {
   failIfMajorPerformanceCaveat: true,
 };
 
-/** A triangle that covers the whole target, from the vertex index alone. */
+/** One triangle covering the whole target, from `gl_VertexID` alone. */
 const VERTEX = `#version 300 es
 void main() {
   vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
@@ -115,7 +113,7 @@ void main() {
     r *= texelFetch(uScale, c, 0).r;
     if (r < uLeast) return;
   }
-  // Thresholds two diamonds over from the size's, so the dots that round up in size aren't the first to change ramp.
+  // Bayer threshold from two diamonds over, so dots that round up in size aren't also the first to switch ramp.
   bool accented = sum.b > ink * threshold(i + 2, j + 2);
   float shade = floor(min(1.0, sum.g / ink) * float(uShades - 1) + 0.5);
   outColor = vec4(r / ${SIZE_RANGE.toFixed(1)}, shade / 255.0, accented ? 1.0 : 0.0, 1.0);
@@ -146,7 +144,7 @@ float edge(vec2 p, float r) {
     q -= r;
     return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
   }
-  // Each side of a diamond is a quadratic curve from tip to tip, on a parabola across the diagonal between them.
+  // Each side is a parabola from tip to tip, its axis perpendicular to the straight side.
   float w = (q.y - q.x) / SQRT2;
   if (abs(w) > r / SQRT2) return length(q - (w > 0.0 ? vec2(0.0, r) : vec2(r, 0.0)));
   float c = r * (1.0 - uCurve) * 0.5;
@@ -161,8 +159,8 @@ void main() {
   float pitch = uCell * 0.7071067812;
   vec2 uv = uStraight ? at / pitch : vec2(at.x + at.y, at.y - at.x) / uCell;
   ivec2 nearest = ivec2(floor(uv + 0.5));
-  // The dots that reach here, laid in the order the canvas printer fills them: the last so far on top, and all the
-  // others under it. Exact where two dots overlap; where three do, the two under the top one may be the wrong way round.
+  // Composites in the canvas printer's fill order: highest order so far in top, the rest in under.
+  // Exact for two overlapping dots; with three, the two under top may come out swapped.
   vec4 top = vec4(0.0);
   int topOrder = -1;
   vec4 under = vec4(0.0);
@@ -193,7 +191,7 @@ void main() {
   outColor = top + under * (1.0 - top.a);
 }`;
 
-/** A Gaussian blur along one axis. Beyond the edges it carries on as at the edge. */
+/** Gaussian blur along `uAxis`. Samples past the edge repeat the edge px. */
 const BLUR = `${HEADER}
 uniform sampler2D uInk;
 uniform vec2 uAxis;
@@ -217,7 +215,7 @@ void main() {
   outColor = blurred();
 }`;
 
-/** The second half of the blur, then the cut on alpha, laid over the background. */
+/** Second blur pass, then the cut on alpha, over the background. */
 const SET = `${BLUR}
 uniform float uSharp;
 uniform float uCut;
@@ -259,7 +257,7 @@ interface Resources {
 let usable: boolean | undefined;
 
 export class GlPrinter {
-  /** The widest or tallest canvas it can print, in device px. */
+  /** Largest canvas width or height it can print, in device px. */
   readonly maxSize: number;
   private res: Resources;
   private lost = false;
@@ -269,12 +267,11 @@ export class GlPrinter {
   private background: [number, number, number] = [1, 1, 1];
 
   /**
-   * A printer on `canvas`, or null where WebGL2 isn't available on the GPU, in
-   * which case the canvas is left as it was, free to take a 2D context.
-   * `onRestore` is called once it can print again after losing its context.
+   * Null if hardware WebGL2 can't run these shaders; `canvas` is then still free
+   * to take a 2D context. `onRestore` runs once it can print again after a context loss.
    */
   static create(canvas: HTMLCanvasElement, onRestore: () => void): GlPrinter | null {
-    // Tried on a spare canvas first, as a canvas that has had a WebGL context can't then take a 2D one.
+    // Test on a spare canvas: one that has had a WebGL context can't take a 2D one.
     usable ??= tryOut();
     if (!usable) return null;
     const gl = canvas.getContext("webgl2", OPTIONS);
@@ -292,7 +289,7 @@ export class GlPrinter {
     canvas.addEventListener("webglcontextrestored", this.onRestored);
   }
 
-  /** Frees what it made on the GPU. The context stays, so a new printer can take the canvas over. */
+  /** Frees its GPU resources but keeps the context, so a new printer can take over the canvas. */
   destroy() {
     const { gl, res } = this;
     this.canvas.removeEventListener("webglcontextlost", this.onLost);
@@ -316,7 +313,7 @@ export class GlPrinter {
     this.upload(f);
     gl.bindVertexArray(res.vao);
 
-    // 1. Each diamond's dot.
+    // 1. Dots, one px per diamond.
     this.target(res.dotTarget, nu, nv);
     const dots = this.use(res.dots);
     this.texture(dots, "uScene", 0, res.scene);
@@ -334,7 +331,7 @@ export class GlPrinter {
     gl.uniform1iv(this.at(dots, "uBayer[0]"), BAYER4);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-    // 2. Their shapes, at the screen's resolution.
+    // 2. Shapes, at screen resolution.
     this.target(res.shapeTarget, width, height);
     const shapes = this.use(res.shapes);
     this.texture(shapes, "uDots", 0, res.dotTarget.texture);
@@ -348,14 +345,14 @@ export class GlPrinter {
     gl.uniform1i(this.at(shapes, "uShape"), f.shape);
     gl.uniform1f(this.at(shapes, "uReach"), f.reach);
     gl.uniform1f(this.at(shapes, "uCurve"), f.curve);
-    // Dots reach the diamonds diagonally next to the one a px is in only if they reach half a diamond from their middle.
+    // A dot reaches px in its diagonal neighbours' diamonds only if it reaches over half a diamond from its centre.
     let grown = 1;
     if (f.scale) for (const v of f.scale) if (v > grown) grown = v;
     const reach = (Math.max(...f.sizes) * grown * f.reach * f.cell) / 2 + 1 / f.dpr;
     gl.uniform1i(this.at(shapes, "uCorners"), reach > f.cell / 2 ? 1 : 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-    // 3. The ink spreads across, then down, and sets on the background.
+    // 3. Ink: blur across, then down, and set on the background.
     const radius = Math.min(MAX_RADIUS, Math.ceil(f.blur * 3));
     let ink = res.shapeTarget.texture;
     if (radius > 0) {
@@ -375,7 +372,6 @@ export class GlPrinter {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
-  /** Sends the tone image, the dot scales and the palette up to the GPU. */
   private upload(f: PrintFrame) {
     const { gl, res } = this;
     const [nu, nv] = f.count;
@@ -412,7 +408,7 @@ export class GlPrinter {
     }
   }
 
-  /** Draws into `t` from here on, first making it `width` × `height` if it isn't. */
+  /** Binds `t` for drawing, first resizing it to `width` × `height` if needed. */
   private target(t: Target, width: number, height: number) {
     const { gl } = this;
     if (t.width !== width || t.height !== height) {
@@ -459,7 +455,7 @@ export class GlPrinter {
   private setUp(): Resources {
     const { gl } = this;
     const [dots, shapes, spread, set] = programs(gl);
-    // The tone image goes up exactly as drawn: not flipped, premultiplied or colour managed.
+    // Upload the tone image exactly as drawn: no flip, premultiply or colour conversion.
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
@@ -502,7 +498,7 @@ export class GlPrinter {
   }
 
   private onLost = (e: Event) => {
-    // Without this the browser won't give the context back.
+    // Without this the browser never restores the context.
     e.preventDefault();
     this.lost = true;
   };
@@ -515,9 +511,8 @@ export class GlPrinter {
 }
 
 /**
- * A Gaussian's samples out to `radius` px from the middle, for blurring both
- * ways: one in the middle, then one between each pair of px further out, at
- * the point where the GPU's filtering weighs the two as the Gaussian does.
+ * Gaussian samples out to `radius` px, for both sides: one in the middle, then one between each
+ * pair of px, placed so linear filtering weighs the pair as the Gaussian does.
  */
 function gaussian(sigma: number, radius: number) {
   const w = Array.from({ length: radius + 2 }, (_, k) => (k === 0 ? 1 : k <= radius ? Math.exp(-(k * k) / (2 * sigma * sigma)) : 0));
@@ -539,7 +534,7 @@ function padded(values: number[]) {
   return out;
 }
 
-/** Whether WebGL2 runs on the GPU here and takes these shaders, tried on a spare canvas. */
+/** Whether hardware WebGL2 compiles these shaders, tested on a spare canvas. */
 function tryOut() {
   const gl = document.createElement("canvas").getContext("webgl2", OPTIONS);
   if (!gl) return false;

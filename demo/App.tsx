@@ -11,7 +11,7 @@ export function App() {
   const scheme = options.scheme ?? "light";
   const page = schemeColors(options.colors, scheme).background;
 
-  // The page behind the field, and the browser's own scrollbars and controls, follow its scheme.
+  // The page background and the browser's scrollbars and controls follow the field's scheme.
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty("--page", page);

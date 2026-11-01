@@ -11,7 +11,7 @@ import { spawnScale } from "./spawn.js";
 const STEP = 1 / 60;
 const MAX_STEPS = 4;
 
-/** A field whose shorter side is under this many CSS px is on a phone, as Android counts them. */
+/** A field whose shorter side is under this many CSS px counts as a phone (Android's 600dp breakpoint). */
 const PHONE = 600;
 
 /** Near-white blue page, and a ramp from pale blue through blue to navy. */
@@ -22,57 +22,53 @@ export const DEFAULT_COLORS: HalftoneColors = {
   dark: "#16295f",
 };
 
-/** A light page, or a dark one with the colours' lightness turned over (see schemeColors). */
+/** `dark` turns the colours' lightness over (see schemeColors). */
 export type Scheme = "light" | "dark";
 
 /** OKLCH lightness of the background on a dark page. */
 const DARK_PAGE = 0.2;
 /**
- * Extra lift on a dark page for colours that sat close to the light one. The
- * eye tells dark colours apart less well than light ones, so an even turnover
- * sinks them into the page. The lift fades out further from the page.
+ * Extra lightness on a dark page for colours near the page's own, fading with distance from it.
+ * The eye separates dark colours less well than light ones, so an even turnover sinks them into the page.
  */
 const DARK_LIFT = 1.2;
 
 export interface FlowerFieldOptions {
-  /** Diamond width in CSS px. Default scales with the width, from 5 to 10, and is at least 6 on a phone. */
+  /** Diamond width in CSS px. Default scales with the field's width from 5 to 10, at least 6 on a phone. */
   cell?: number;
-  /** How many dot sizes to use, evenly spaced. Default 6. */
+  /** Number of evenly spaced dot sizes. Default 6. */
   steps?: number;
-  /** Dot sizes as a share of a full diamond, by area, smallest first. Overrides `steps`. */
+  /** Dot sizes, smallest first: each covers the area of a diamond this share of a full one wide. Overrides `steps`. */
   sizes?: number[];
-  /** Background, and the colour ramp from `light` through `ink` to `dark` that every dot takes a shade of, for a light page. Insects print in the same ramp turned to the opposite hue. */
+  /** Background, and the ramp from `light` through `ink` to `dark` that dots are shaded from, as on a light page. Insects, trails and loose petals use this ramp at the opposite hue. Unset keys keep `DEFAULT_COLORS`. */
   colors?: Partial<HalftoneColors>;
-  /** Light or dark page. Dark turns `colors` over (see schemeColors). Default light. */
+  /** `light` or `dark` page; `dark` turns `colors` over (see schemeColors). Default light. */
   scheme?: Scheme;
-  /** How many shades the colour ramp is split into. Default 15. */
+  /** Number of shades the ramp is split into. Default 15. */
   shades?: number;
-  /** How far ink spreads before it sets, as a share of a diamond's width: dots blur and are cut back sharp, so near ones run together. Default 0.1; 0 keeps every dot its own shape. */
+  /** How far ink spreads before it sets, as a share of diamond width: dots blur and are cut back sharp, so near ones run together. 0 keeps each dot's shape. Default 0.1. */
   spread?: number;
-  /** Where spread ink is cut back, from 0 to 1: lower keeps more of it, so dots swell and merge more. Default 0.26. */
+  /** Where spread ink is cut back, from 0 to 1: lower keeps more, so dots swell and merge more. Default 0.26. */
   threshold?: number;
-  /** Round dots, squares with level sides, or diamonds with their sides curved in by `curve`. Each size prints the same tone whatever the shape; diamonds spread half as far and squares not at all. Default round. */
+  /** `round`, `square` with level sides, or `diamond` with sides curved in by `curve`. Each size prints the same tone in any shape; diamonds spread half as far, squares not at all. Default round. */
   dot?: DotShape;
   /** How far a diamond dot's sides curve in, from 0 straight to 1 a four-pointed star. Default 0.75. */
   curve?: number;
-  /** Dots in staggered rows, like a print screen, or in straight rows and columns, with as many to an area either way. Default diagonal. */
+  /** `diagonal`: staggered rows like a print screen. `straight`: rows and columns. Same dot density either way. Default diagonal. */
   grid?: Grid;
   /** Multiplier on how far the wind bends the stems. Default 1. */
   wind?: number;
   /** Multiplier on the number of stems. Default 1. */
   density?: number;
-  /** Fixes the arrangement. Without one, each mount grows a different bed. */
+  /** Fixes the arrangement. Unset, each mount grows a different bed. */
   seed?: number;
-  /** Finer tuning of the layout, species, shade, wind, sway, pointer, spawn and insects. Anything left out keeps its default. */
+  /** Fine tuning; see `DEFAULT_SETTINGS`. Anything left out keeps its default. */
   settings?: FlowerSettingsInput;
 }
 
 /**
- * Grows a garden on a canvas and keeps it swaying: fixed-timestep loop,
- * growing in on first show, re-layout on resize, pointer brushing, a trail
- * behind the pointer, petals shaken loose or puffed out by a click,
- * insects visiting and sending up hearts when clicked, pausing off-screen, and a still frame without insects,
- * petals or the pointer's trail for prefers-reduced-motion. `update` takes new options without growing in again.
+ * Runs a garden on a canvas on a fixed-timestep loop, paused off-screen. With prefers-reduced-motion
+ * it draws still frames, without insects, loose petals or the pointer trail.
  */
 export class FlowerEngine {
   private settings: FlowerSettings;
@@ -83,7 +79,7 @@ export class FlowerEngine {
   private raf = 0;
   private last = 0;
   private acc = 0;
-  /** Whether the canvas needs drawing before the bed next moves, having been cleared by a resize. */
+  /** Set by a resize, which clears the canvas, so the next frame draws even without a step. */
   private stale = true;
   private visible = true;
   private disposed = false;
@@ -114,7 +110,7 @@ export class FlowerEngine {
 
     this.reducedMotion.addEventListener("change", this.onMotionPreference);
     window.addEventListener("pointermove", this.onPointerMove, { passive: true });
-    // On the canvas itself, so clicking anything laid over it doesn't count.
+    // On the canvas, so clicks on anything laid over it don't count.
     canvas.addEventListener("pointerdown", this.onPointerDown);
 
     this.resize();
@@ -122,9 +118,8 @@ export class FlowerEngine {
   }
 
   /**
-   * Colours, dots, ink, shade, wind, sway and the pointer change straight
-   * away. A new seed, cell, density, layout, species, mix or tone lays the bed
-   * out again where it stands. Spawn settings apply to the next engine.
+   * Applies new options without growing in again. A new seed, cell, density, layout, species, mix
+   * or tone re-lays the bed; spawn settings wait for the next engine; the rest apply at once.
    */
   update(options: FlowerFieldOptions) {
     const before = this.options;
@@ -135,7 +130,7 @@ export class FlowerEngine {
       options.cell !== before.cell ||
       (options.density ?? 1) !== (before.density ?? 1) ||
       bedKey(settings) !== bedKey(this.settings);
-    // The halftone lays its lattice out again, but the bed stays as it is.
+    // A grid change rebuilds the halftone lattice only; the bed stays.
     const regrid = (options.grid ?? "diagonal") !== (before.grid ?? "diagonal");
     this.options = options;
     this.seed = seed;
@@ -167,7 +162,7 @@ export class FlowerEngine {
     this.canvas.removeEventListener("pointerdown", this.onPointerDown);
   }
 
-  /** Dot shape, sizes, shades and ink spread from the options. `applyInk` or a resize puts the spread on the canvas. */
+  /** The spread reaches the canvas only on `applyInk` or a resize. */
   private setDots({ sizes, steps, shades, spread, threshold, dot, curve, grid }: FlowerFieldOptions) {
     this.halftone.dot = dot ?? "round";
     this.halftone.curve = curve ?? 0.75;
@@ -199,12 +194,12 @@ export class FlowerEngine {
     this.stale = true;
     const key = `${rect.width}x${rect.height}`;
     if (relayout || key !== this.laidOut) {
-      // Only the first layout grows in; after a resize the bed is just there.
+      // Only the first layout grows in.
       const spawn = !this.laidOut && !this.reducedMotion.matches && this.settings.spawn.enabled;
       this.laidOut = key;
       this.garden.layout({ width: rect.width, height: rect.height, cell, seed: this.seed, density: this.options.density ?? 1, spawn });
     }
-    // Resizing clears the canvas; without the animation loop, nothing else would redraw it.
+    // Resizing clears the canvas, and with reduced motion no loop redraws it.
     if (this.reducedMotion.matches) this.draw();
   }
 
@@ -227,7 +222,7 @@ export class FlowerEngine {
       steps++;
     }
     if (steps === MAX_STEPS) this.acc = 0;
-    // The bed only moves on a step, so on a screen that refreshes more often than that, the frames between would draw the same picture again.
+    // The bed only moves on a step; on screens above 60 Hz, frames without one would redraw the same picture.
     if (steps || this.stale) {
       this.stale = false;
       this.draw();
@@ -248,12 +243,11 @@ export class FlowerEngine {
     }
   };
 
-  /** Moving the pointer through the stems pushes them aside, and leaves a trail. */
   private onPointerMove = (e: PointerEvent) => {
     const rect = this.canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    // After a pause, or a touch lifting, the pointer may come back anywhere.
+    // After a pause or a lifted touch, the pointer may come back anywhere.
     const fresh = e.timeStamp - this.lastPointer > 150;
     if (fresh) this.garden.releasePointer();
     this.lastPointer = e.timeStamp;
@@ -261,7 +255,6 @@ export class FlowerEngine {
     if (!this.reducedMotion.matches) this.pointerInk.move(x, y, fresh);
   };
 
-  /** Clicking or tapping a butterfly or bee sends up a heart, and a flower shakes a petal loose; anywhere else, tiny petals puff out from the spot. */
   private onPointerDown = (e: PointerEvent) => {
     if (!e.isPrimary || e.button !== 0 || this.reducedMotion.matches) return;
     const rect = this.canvas.getBoundingClientRect();
@@ -270,12 +263,9 @@ export class FlowerEngine {
 }
 
 /**
- * The colours a field prints in: `colors` over the defaults, as they are for a
- * light page. For a dark one, each keeps its hue and vividness and is turned
- * over in OKLCH lightness: the background goes dark, and each ramp colour sits
- * about as far from it as before, now on the light side, with those nearest
- * the page lifted a little more (see DARK_LIFT). So pale flowers still sit
- * close to the page and dark ones still stand out most.
+ * `colors` over the defaults. For `dark`, each keeps its hue and chroma and turns over in OKLCH
+ * lightness: the background goes dark and each ramp colour sits about as far above it as it sat
+ * below, those nearest the page lifted more (see DARK_LIFT), so dark flowers still stand out most.
  */
 export function schemeColors(colors?: Partial<HalftoneColors>, scheme: Scheme = "light"): HalftoneColors {
   const out = { ...DEFAULT_COLORS };
@@ -287,14 +277,14 @@ export function schemeColors(colors?: Partial<HalftoneColors>, scheme: Scheme = 
   const page = lightnessOf(out.background);
   const span = 1 - DARK_PAGE;
   const flip = (colour: string) => {
-    // How far from the page it is, as a share of the room above a dark one.
+    // Distance below the page, as a share of the room above a dark one.
     const t = Math.min(1, Math.max(0, (page - lightnessOf(colour)) / span));
     return withLightness(colour, DARK_PAGE + span * (t + DARK_LIFT * t * (1 - t) ** 4));
   };
   return { background: flip(out.background), light: flip(out.light), ink: flip(out.ink), dark: flip(out.dark) };
 }
 
-/** Diamond width for a field `width` × `height` CSS px: wider screens get bigger diamonds. A phone's px are physically smaller than a computer's, so its diamonds start a size up. */
+/** Wider fields get bigger diamonds. Phones start a size up, as their CSS px are physically smaller. */
 function autoCell(width: number, height: number) {
   const least = Math.min(width, height) < PHONE ? 6 : 5;
   return Math.round(clamp(width / 170, least, 10));
@@ -304,7 +294,7 @@ function oppositeRamp({ light, ink, dark }: HalftoneColors) {
   return { light: opposite(light), ink: opposite(ink), dark: opposite(dark) };
 }
 
-/** The settings a garden is laid out from, as a string to compare. */
+/** The settings the bed is laid out from, as a string to compare. */
 function bedKey({ layout, species, mix, tone }: FlowerSettings) {
   return JSON.stringify([layout, species, mix, tone]);
 }

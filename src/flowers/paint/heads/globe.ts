@@ -4,11 +4,9 @@ import { dome, litBy, tone } from "../tone.js";
 import { fillPetal, headFrame, paintInDepth, petal, point, type Part } from "./petals.js";
 
 /**
- * Rings of cupped petals from the outside in, each starting higher and
- * standing up straighter, so together they make a ball. Sizes are shares of
- * the head's radius; `by` moves the ring along the colour ramp, so rings that
- * overlap print in different shades. 28 petals in all, one `jitter` and
- * `drift` each.
+ * Petal rings, outside in, each starting higher and standing straighter so they
+ * form a ball. Sizes are shares of the head's radius; `by` sets overlapping
+ * rings apart on the ramp. 28 petals in all, one `jitter` and `drift` each.
  */
 export const RINGS = [
   { n: 6, start: [0.12, 0], length: 1, width: 0.75, heading: 0.15, bend: 1.3, by: 0.12 },
@@ -23,7 +21,7 @@ export function paintGlobe(ctx: CanvasRenderingContext2D, h: Head) {
   const f = headFrame(h.face, h.turn);
   const parts: Part[] = [];
   if (h.lost.size) {
-    // The seed heads in the middle, hidden while the petals are all there.
+    // Seed heads in the middle, hidden while every petal is on.
     const [x, y] = point(f, 0, 0, R * 0.3);
     ctx.fillStyle = dome(ctx, x, y, R * 0.22, h.centre, 0.9);
     ctx.beginPath();
@@ -51,7 +49,7 @@ export function paintGlobe(ctx: CanvasRenderingContext2D, h: Head) {
       parts.push({
         z: p.z,
         paint: () => {
-          // Shadowed deep in the flower, paler at the edge, so each edge stands off the petal behind it.
+          // Darker at the base, paler at the edge, so each edge stands off the petal behind.
           const rib = p.rib;
           const g = ctx.createLinearGradient(rib[0], rib[1], rib[rib.length - 2], rib[rib.length - 1]);
           g.addColorStop(0, tone(h.ink, amount, by + 0.08));

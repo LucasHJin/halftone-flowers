@@ -1,8 +1,6 @@
 /**
- * Everything about how the bed is laid out, sways, answers the pointer, grows
- * in, is visited by insects and sheds petals, and the trail and splash the
- * pointer leaves on it, with the values it ships with. FlowerField takes any part of this
- * as `settings` and fills in the rest from DEFAULT_SETTINGS.
+ * Settings for the flower field and their defaults. `FlowerField` takes any part
+ * of `FlowerSettings` as `settings` and fills in the rest from `DEFAULT_SETTINGS`.
  */
 import { mergeDeep, type DeepPartial } from "../utils/merge.js";
 import { BOUQUET_MIX, MEADOW_MIX, SPECIES, type Species } from "./species.js";
@@ -11,12 +9,12 @@ import type { Kind } from "./types.js";
 export interface LayoutSettings {
   /** Base flower size: `share` of the shorter side, kept within `min` and `max` px. Head sizes are multiples of it. */
   flowerSize: { share: number; min: number; max: number };
-  /** Tall stems: one per `spacing` px of width, kept within `min` and `max`, then times `density`. */
+  /** Tall stems: one per `spacing` px of width, kept within `min` and `max`, times `density`. */
   stems: { spacing: number; min: number; max: number };
   bouquet: {
-    /** How far heads reach from the bottom-left corner, as shares of the width and height. */
+    /** Furthest heads reach from the bottom-left corner, as shares of the width and height. */
     reach: [number, number];
-    /** How close to the corner heads can land, as a share of `reach`. */
+    /** Closest a head lands to the corner, as a share of `reach`. */
     inner: number;
     /** How far right of the corner roots spread, as a share of the width. */
     roots: number;
@@ -24,7 +22,7 @@ export interface LayoutSettings {
   meadow: {
     /** Short stems per tall stem. */
     amount: number;
-    /** How many more stems, more varied in height, grow toward its right end, where it's shorter and smaller: none extra 30% of the way along, rising to this many times as many again at the end. */
+    /** Extra stems, more varied in height, toward its short right end: none 30% of the way along, rising to this many times its own density at the end. 0 adds none. */
     thicken: number;
     /** Where it starts and ends across the width, as shares of it. */
     span: [number, number];
@@ -32,7 +30,7 @@ export interface LayoutSettings {
     height: [number, number];
     /** How far right of its root each head sits, as a share of its height, picked from this range. Negative leans back against the wind. */
     slant: [number, number];
-    /** How far each stem, and each tuft of grass along the bottom, strays from evenly spaced: 0 none, 1 anywhere in its own share of the span, 2 into its neighbours'. */
+    /** How far each stem, and each grass tuft along the bottom, strays from even spacing: 0 none, 1 anywhere in its own share of the span, 2 into its neighbours'. */
     scatter: number;
   };
   grass: {
@@ -41,27 +39,27 @@ export interface LayoutSettings {
     /** Blades in tufts along the bottom, per tall stem. */
     bottom: number;
   };
-  /** Share of stems and blades that set off leaning out and curve up toward the tip, instead of rising and arching over. */
+  /** Share of stems and blades that set off leaning out and curve up toward the tip; the rest rise and arch over. */
   curveUp: number;
 }
 
-/** Odds of each kind; leave a kind out or give it 0 to never grow it. */
+/** Relative odds of each kind; leave a kind out or set it to 0 to never grow it. */
 export type Mix = Partial<Record<Kind, number>>;
 
-/** How strongly each part prints, from the back of the bed to the front, so nearer things read darker. */
+/** How strongly each part prints at the back and the front of the bed, so nearer things read darker. */
 export interface ToneSettings {
   flowers: [number, number];
   stems: [number, number];
   grass: [number, number];
 }
 
-/** How each plant's colours move along the ramp from light to dark, so plants that overlap print in different shades. */
+/** How each plant's colours shift along the light-to-dark ramp, so overlapping plants print in different shades. */
 export interface ShadeSettings {
   /** How much lighter the back of the bed prints than the front, as a share of the ramp. */
   depth: number;
-  /** How far each plant strays from that at random, either way, as a share of the ramp. */
+  /** Most each plant strays from that at random, either way, as a share of the ramp. */
   jitter: number;
-  /** How much lighter the side of each flower head facing the light, from the upper left, prints than the side facing away, as a share of the ramp. */
+  /** How much lighter a flower head's side facing the light (upper left) prints than the side facing away, as a share of the ramp. */
   light: number;
 }
 
@@ -73,34 +71,34 @@ export interface WindWave {
   period: number;
   /** Px between crests across the screen. */
   length: number;
-  /** Px between crests down the screen, for a wave that also varies with height. */
+  /** Px between crests down the screen. Omitted, the wave is the same at every height. */
   height?: number;
-  /** Where in its cycle it starts, radians. */
+  /** Where in its cycle it starts, radians; default 0. */
   phase?: number;
 }
 
 export interface WindSettings {
-  /** Steady push to the right, so the bed leans with the wind; 0 sways evenly both ways. */
+  /** Steady push to the right (negative: left), so the bed leans with the wind; 0 sways evenly both ways. */
   lean: number;
-  /** Added together on top of `lean`. */
+  /** Summed on top of `lean`. */
   waves: WindWave[];
 }
 
 export interface SwaySettings {
-  /** Multiplier on how quickly stems swing; long stems always swing slower than short ones. */
+  /** Multiplier on how fast stems swing; long stems always swing slower than short ones. */
   speed: number;
-  /** How soon a flower stem stops swinging past where the wind holds it: lower wobbles more, 1 doesn't overshoot. */
+  /** Damping ratio of flower stems: lower wobbles more past where the wind holds them, 1 doesn't overshoot. */
   damping: number;
-  /** The same for grass. */
+  /** `damping` for grass. */
   grassDamping: number;
 }
 
 export interface CursorSettings {
-  /** Wind added per px the pointer moves across a stem it's touching. 0 turns the pointer off. */
+  /** Wind added per px the pointer moves across a stem it's touching. 0: the pointer doesn't push stems. */
   strength: number;
-  /** The most wind the pointer can add to one stem; the default wind peaks at about 1. */
+  /** Most wind the pointer can add to one stem; the default wind peaks at about 1. */
   limit: number;
-  /** Seconds for a push to build up around a stem. */
+  /** Seconds for a push to build to about two thirds on a stem. */
   rise: number;
   /** Seconds for a push to fade to about a third. */
   fade: number;
@@ -109,7 +107,7 @@ export interface CursorSettings {
 }
 
 export interface SpawnSettings {
-  /** Grow the bed in when it first appears, instead of showing it all at once. */
+  /** Grow the bed in when it first appears; false shows it all at once. */
   enabled: boolean;
   /** Seconds from the first plant starting to the last one fully in. */
   duration: number;
@@ -117,7 +115,7 @@ export interface SpawnSettings {
   grow: number;
   /** Seconds for the growing front to climb a whole plant, picked per plant from this range. */
   climb: [number, number];
-  /** The most a diamond lags behind the front, so the front doesn't fill in row by row. */
+  /** Most seconds a diamond lags behind the front, so the front doesn't fill in row by row. */
   scatter: number;
   /** How closely the order follows a wave out from the corner, 0 to 1; the rest is random. */
   order: number;
@@ -126,26 +124,25 @@ export interface SpawnSettings {
 export interface TrailSettings {
   /** Seconds a trail takes to fade away; 0 leaves none. */
   fade: number;
-  /** Line width in px. The halftone prints it as a chain of dots, bigger and closer the wider and stronger it is. */
+  /** Line width, px. Printed as a chain of dots, bigger and closer the wider and stronger it is. */
   width: number;
-  /** How strongly its newest part prints, from 0 to 1. */
+  /** How strongly its newest part prints, 0 to 1. */
   strength: number;
 }
 
 /**
- * The heart a butterfly or bee sends up when it's clicked or tapped: a line
- * like its trail, in the trail's width and strength, rising out of it and
- * drawing a heart, which swells a little and fades.
+ * The heart a clicked or tapped butterfly or bee sends up: a line in its trail's
+ * width and strength that rises out of it, draws a heart, then swells and fades.
  */
 export interface HeartSettings {
   enabled: boolean;
   /** Smallest and biggest across, in base flower sizes. */
   size: [number, number];
-  /** Shortest and longest seconds the line takes to rise out of the insect and draw the heart round. */
+  /** Shortest and longest seconds for the line to rise out of the insect and draw the heart. */
   draw: [number, number];
   /** Least and most it then swells, as a share of its size. */
   swell: [number, number];
-  /** Shortest and longest seconds it takes to swell and fade away. */
+  /** Shortest and longest seconds to swell and fade away. */
   fade: [number, number];
 }
 
@@ -154,7 +151,7 @@ export interface InsectSettings {
   enabled: boolean;
   /** Average seconds between one arriving and the next. */
   every: number;
-  /** The most in the bed at once. */
+  /** Most in the bed at once. */
   most: number;
   /** Relative odds of a butterfly and a bee each time one comes. */
   odds: [number, number];
@@ -170,51 +167,48 @@ export interface InsectSettings {
   heart: HeartSettings;
 }
 
-/** Petals that come loose, one a click, when a flower is clicked or tapped, and drift away to the left or right. */
+/** Petals that come loose, one per click or tap on a flower, and drift away left or right. */
 export interface PetalSettings {
   enabled: boolean;
   /** Multiplier on their size, which follows their flower's. */
   size: number;
   /** Multiplier on how fast the wind carries them. */
   speed: number;
-  /** Share that sink toward the ground rather than sail off far to one side. */
+  /** Share that sink toward the ground; the rest sail off far to one side. */
   sink: number;
-  /** How many times a minute each loops the loop, on average; more often in a gust. */
+  /** Times a minute each loops the loop, on average; more often in a gust. */
   loops: number;
-  /** Shortest and longest seconds each stays its flower's colours once loose, before it starts to turn the pointer trail's. */
+  /** Shortest and longest seconds each keeps its flower's colours once loose, before turning the pointer trail's. */
   wait: [number, number];
-  /** Shortest and longest seconds each then takes to turn from its flower's colours to the pointer trail's, spreading across it from where it was clicked. */
+  /** Shortest and longest seconds each then takes to turn the pointer trail's colours, spreading from where it was clicked. */
   turn: [number, number];
 }
 
 /**
- * The trail the pointer leaves behind it as it moves over the field: a few
- * strands, each printed like the insects' trails, weaving round each other
- * along a smoothed path behind it. `fade` is the seconds each part takes to
- * thin out and go once `hold` is up; `width` and `strength` are each strand's.
+ * The pointer's trail: a few strands, each printed like the insects' trails,
+ * weaving round a smoothed path behind it. `fade` starts once `hold` is up, and
+ * 0 cuts each part off there. `width` and `strength` are per strand.
  */
 export interface PointerTrailSettings extends TrailSettings {
   enabled: boolean;
   /** Seconds each part stays at full strength before it starts to fade. */
   hold: number;
-  /** How many strands. */
+  /** Number of strands, rounded, at least 1. */
   strands: number;
   /** Px each strand strays either side of the path, once they've spread apart. */
   spread: number;
-  /** Px along the path from one of a strand's crests to the next, give or take. */
+  /** Px along the path between a strand's crests, give or take. */
   wave: number;
-  /** Radians a second the waves run along the strands, give or take, some one way and some the other. */
+  /** Radians a second the waves run along the strands, give or take, some each way. */
   flow: number;
   /** Seconds the trail's head lags behind the pointer; longer rounds its turns off more. */
   lag: number;
 }
 
 /**
- * Tiny petals that puff out from a click or tap that misses the flowers, as if
- * a flower burst there, copies of petals off a few flowers in the bed printed
- * in the pointer trail's colours. Once
- * the puff dies down they drift away like petals shaken off a flower, with the
- * same speed, sink and loops.
+ * Tiny petals that puff out from a click or tap that misses the flowers: copies
+ * of petals from a few flowers in the bed, in the pointer trail's colours. They
+ * then drift away like shed petals, with `petals`' `speed`, `sink` and `loops`.
  */
 export interface SplashSettings {
   enabled: boolean;
@@ -242,7 +236,7 @@ export interface FlowerSettings {
   splash: SplashSettings;
 }
 
-/** Any part of FlowerSettings. Arrays and ranges replace the default whole. */
+/** Any part of `FlowerSettings`. Arrays, ranges included, replace the default whole. */
 export type FlowerSettingsInput = DeepPartial<FlowerSettings>;
 
 export const DEFAULT_SETTINGS: FlowerSettings = {

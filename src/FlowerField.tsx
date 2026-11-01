@@ -3,19 +3,19 @@ import type { FlowerFieldOptions, InsectKind } from "./flowers/index.js";
 import { useFlowerField } from "./useFlowerField.js";
 
 export interface FlowerFieldHandle {
-  /** Sends a butterfly or bee in now, or one picked by the insect settings' odds. */
+  /** Sends in a butterfly or bee now; without `kind`, picks one by the insect settings' odds. Does nothing under reduced motion. */
   release(kind?: InsectKind): void;
 }
 
 export interface FlowerFieldProps extends FlowerFieldOptions {
   className?: string;
-  /** Laid over the canvas's own style, which fills its parent. */
+  /** Merged over the canvas's own style, which fills its parent. */
   style?: CSSProperties;
 }
 
 const FILL: CSSProperties = { display: "block", width: "100%", height: "100%" };
 
-/** Procedurally grown flowers swaying in the wind, with butterflies and bees visiting, drawn as a halftone of round dots. The pointer leaves a trail like the insects', clicking an insect sends up a heart, clicking a flower shakes its petals off, until it has none left, and a click elsewhere puffs out tiny petals that drift off on the wind. Fills its parent. */
+/** Procedurally grown flowers swaying in the wind, visited by butterflies and bees, drawn as a halftone. The pointer leaves a trail; clicking an insect sends up a heart, clicking a flower knocks off one petal, and clicking elsewhere puffs out tiny petals that drift off on the wind. Fills its parent. */
 export const FlowerField = forwardRef<FlowerFieldHandle, FlowerFieldProps>(function FlowerField({ className, style, ...options }, ref) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useFlowerField(canvasRef, options);
