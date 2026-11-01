@@ -34,7 +34,7 @@ function perKind<T>(make: (kind: Kind) => T, kinds = KINDS) {
   return Object.fromEntries(kinds.map((kind) => [kind, make(kind)])) as Record<Kind, T>;
 }
 
-/** The mix's kinds in its own order, then the rest. Picking walks the mix in order, so this keeps a seed's bed unchanged. */
+/** The mix's kinds in its own order, then the rest. Picking walks the mix in order, so this keeps a seed's field unchanged. */
 function mixOrder(m: Mix) {
   return [...(Object.keys(m) as Kind[]), ...KINDS.filter((kind) => !(kind in m))];
 }
@@ -282,7 +282,7 @@ const CONFIG = {
   },
   species: { _collapsed: true, ...perKind((kind) => speciesDials(species[kind])) },
   growAgain: { type: "action", label: "Grow again" },
-  newBed: { type: "action", label: "New bed" },
+  newField: { type: "action", label: "New field" },
 } satisfies DialConfig;
 
 type Values = ResolvedValues<typeof CONFIG>;
@@ -431,7 +431,7 @@ function randomColors(from: number) {
 
 /**
  * A DialKit panel for every FlowerField option and setting. Key the FlowerField on `generation`:
- * "Grow again" and "New bed" remount it to grow in again, which is when spawn settings apply.
+ * "Grow again" and "New field" remount it to grow in again, which is when spawn settings apply.
  */
 export function useFlowerDials(field: RefObject<FlowerFieldHandle | null>) {
   const [seed, setSeed] = useState(randomSeed);
@@ -442,8 +442,8 @@ export function useFlowerDials(field: RefObject<FlowerFieldHandle | null>) {
       if (action === "colors.randomize") dials.setValues({ colors: randomColors(hueOf(dials.getValues().colors.ink)) });
       if (action === "insects.butterfly") field.current?.release("butterfly");
       if (action === "insects.bee") field.current?.release("bee");
-      if (action === "newBed") setSeed(randomSeed());
-      if (action === "growAgain" || action === "newBed") setGeneration((g) => g + 1);
+      if (action === "newField") setSeed(randomSeed());
+      if (action === "growAgain" || action === "newField") setGeneration((g) => g + 1);
     },
   });
   return { options: toOptions(dials.values, seed), generation, sound: dials.values.sound };

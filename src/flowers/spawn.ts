@@ -1,5 +1,5 @@
 /**
- * Grows the bed in: each plant from the ground up, spreading out from the
+ * Grows the field in: each plant from the ground up, spreading out from the
  * corner, each diamond popping into its dot.
  *
  * The halftone only sees dots, so timing reaches it through a mask: each plant
@@ -33,7 +33,7 @@ export interface SpawnPlan {
 /** Sets each plant's `spawn`. Call after the plants are posed. */
 export function planSpawn(plants: Plant[], width: number, height: number, seed: number, settings: SpawnSettings): SpawnPlan {
   const { duration, grow, scatter, climb, order } = settings;
-  // Its own sequence, so the same seed grows the same bed whether or not it spawns.
+  // Its own sequence, so the same seed grows the same field whether or not it spawns.
   const rand = createRandom(seed ^ 0x5bd1e995);
   const plans = plants.map((p) => {
     const main = p.stems[0];

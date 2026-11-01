@@ -46,7 +46,7 @@ Fills its parent, so the parent needs a height. All props are optional.
 | `threshold` | `number` | `0.26` | Where bled ink is cut back, 0 to 1. Lower merges dots more. |
 | `wind` | `number` | `1` | Multiplier on how far the wind bends stems. |
 | `density` | `number` | `1` | Multiplier on the number of stems. |
-| `seed` | `number` | random | The same seed grows the same bed. |
+| `seed` | `number` | random | The same seed grows the same field. |
 | `settings` | `FlowerSettingsInput` | | Fine tuning; any part of the [defaults](#defaults). Arrays replace the default whole. |
 | `className` | `string` | | |
 | `style` | `CSSProperties` | | Merged over `display: block; width: 100%; height: 100%`. |

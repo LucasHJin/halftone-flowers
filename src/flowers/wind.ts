@@ -1,7 +1,7 @@
 import { TAU } from "../utils/math.js";
 import type { WindSettings } from "./settings.js";
 
-/** Wind strength at a point and time: positive pushes right. Waves roll across the bed from the left. */
+/** Wind strength at a point and time: positive pushes right. Waves roll across the field from the left. */
 export type Wind = (x: number, y: number, t: number) => number;
 
 export function createWind({ lean, waves }: WindSettings): Wind {

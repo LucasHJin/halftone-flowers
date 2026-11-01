@@ -3,7 +3,7 @@ import { FlowerEngine, type FieldEmitter, type FlowerFieldOptions } from "./flow
 
 /**
  * Runs a FlowerEngine on the canvas while mounted, reporting through `events`, and returns a ref
- * to it. Option changes go through FlowerEngine.update; only a remount grows the bed in again.
+ * to it. Option changes go through FlowerEngine.update; only a remount grows the field in again.
  */
 export function useFlowerField(canvasRef: RefObject<HTMLCanvasElement | null>, options: FlowerFieldOptions, events: FieldEmitter) {
   const { cell, steps, sizes, shades, spread, threshold, dot, curve, grid, colors, scheme, wind, density, seed, settings } = options;

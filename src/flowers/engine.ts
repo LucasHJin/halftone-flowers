@@ -2,9 +2,9 @@ import { lightnessOf, opposite, withLightness } from "../utils/color.js";
 import { clamp } from "../utils/math.js";
 import { DiamondHalftone, evenSizes, type DotShape, type Grid, type HalftoneColors } from "../halftone/index.js";
 import { FieldEmitter } from "./events.js";
-import { Garden } from "./garden.js";
+import { Field } from "./field.js";
 import type { InsectKind } from "./insects/index.js";
-import { paintGarden } from "./paint/index.js";
+import { paintField } from "./paint/index.js";
 import { PointerInk } from "./pointerInk.js";
 import { resolveSettings, type FlowerSettings, type FlowerSettingsInput } from "./settings.js";
 import { spawnScale } from "./spawn.js";
@@ -64,20 +64,20 @@ export interface FlowerFieldOptions {
   wind?: number;
   /** Multiplier on the number of stems. Default 1. */
   density?: number;
-  /** Fixes the arrangement. Unset, each mount grows a different bed. */
+  /** Fixes the arrangement. Unset, each mount grows a different field. */
   seed?: number;
   /** Fine tuning; see `DEFAULT_SETTINGS`. Anything left out keeps its default. */
   settings?: FlowerSettingsInput;
 }
 
 /**
- * Runs a garden on a canvas on a fixed-timestep loop, paused off-screen. With prefers-reduced-motion
+ * Runs a field on a canvas on a fixed-timestep loop, paused off-screen. With prefers-reduced-motion
  * it draws still frames, without insects, loose petals or the pointer trail. Reports clicks and the
  * trail through `events`.
  */
 export class FlowerEngine {
   private settings: FlowerSettings;
-  private garden: Garden;
+  private field: Field;
   private halftone: DiamondHalftone;
   private pointerInk: PointerInk;
   private seed: number;
@@ -106,8 +106,8 @@ export class FlowerEngine {
     this.halftone.accent = oppositeRamp(this.halftone.colors);
     this.setDots(options);
     this.settings = resolveSettings(options.settings);
-    this.garden = new Garden(this.settings);
-    this.garden.wind = options.wind ?? 1;
+    this.field = new Field(this.settings);
+    this.field.wind = options.wind ?? 1;
     this.pointerInk = new PointerInk(this.settings);
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -130,7 +130,7 @@ export class FlowerEngine {
 
   /**
    * Applies new options without growing in again. A new seed, cell, density, layout, species, mix
-   * or tone re-lays the bed; spawn settings wait for the next engine; the rest apply at once.
+   * or tone re-lays the field; spawn settings wait for the next engine; the rest apply at once.
    */
   update(options: FlowerFieldOptions) {
     const before = this.options;
@@ -140,14 +140,14 @@ export class FlowerEngine {
       seed !== this.seed ||
       options.cell !== before.cell ||
       (options.density ?? 1) !== (before.density ?? 1) ||
-      bedKey(settings) !== bedKey(this.settings);
-    // A grid change rebuilds the halftone lattice only; the bed stays.
+      layoutKey(settings) !== layoutKey(this.settings);
+    // A grid change rebuilds the halftone lattice only; the field stays.
     const regrid = (options.grid ?? "diagonal") !== (before.grid ?? "diagonal");
     this.options = options;
     this.seed = seed;
     this.settings = settings;
-    this.garden.configure(settings);
-    this.garden.wind = options.wind ?? 1;
+    this.field.configure(settings);
+    this.field.wind = options.wind ?? 1;
     this.pointerInk.settings = settings;
     this.halftone.colors = schemeColors(options.colors, options.scheme);
     this.halftone.accent = oppositeRamp(this.halftone.colors);
@@ -159,7 +159,7 @@ export class FlowerEngine {
 
   /** Sends a butterfly or bee in now, or one picked by the insect settings' odds. Nothing comes while motion is reduced. */
   release(kind?: InsectKind) {
-    if (!this.reducedMotion.matches) this.garden.insects.release(kind);
+    if (!this.reducedMotion.matches) this.field.insects.release(kind);
   }
 
   destroy() {
@@ -186,14 +186,14 @@ export class FlowerEngine {
   }
 
   private draw() {
-    const { garden, halftone } = this;
+    const { field, halftone } = this;
     const scene = halftone.beginScene();
-    paintGarden(scene, garden);
-    this.pointerInk.paintTrail(scene, garden.time);
-    const growing = garden.growing;
+    paintField(scene, field);
+    this.pointerInk.paintTrail(scene, field.time);
+    const growing = field.growing;
     if (growing === null) return halftone.present();
-    paintGarden(halftone.beginReveal(), garden, true);
-    halftone.present(spawnScale(garden.spawnPlan!, growing, garden.height));
+    paintField(halftone.beginReveal(), field, true);
+    halftone.present(spawnScale(field.spawnPlan!, growing, field.height));
   }
 
   private resize(relayout = false) {
@@ -209,7 +209,7 @@ export class FlowerEngine {
       // Only the first layout grows in.
       const spawn = !this.laidOut && !this.reducedMotion.matches && this.settings.spawn.enabled;
       this.laidOut = key;
-      this.garden.layout({ width: rect.width, height: rect.height, cell, seed: this.seed, density: this.options.density ?? 1, spawn });
+      this.field.layout({ width: rect.width, height: rect.height, cell, seed: this.seed, density: this.options.density ?? 1, spawn });
     }
     // Resizing clears the canvas, and with reduced motion no loop redraws it.
     if (this.reducedMotion.matches) this.draw();
@@ -231,13 +231,13 @@ export class FlowerEngine {
     this.acc += dt;
     let steps = 0;
     while (this.acc >= STEP && steps < MAX_STEPS) {
-      this.garden.step(STEP);
-      this.pointerInk.step(STEP, this.garden.time);
+      this.field.step(STEP);
+      this.pointerInk.step(STEP, this.field.time);
       this.acc -= STEP;
       steps++;
     }
     if (steps === MAX_STEPS) this.acc = 0;
-    // The bed only moves on a step; on screens above 60 Hz, frames without one would redraw the same picture.
+    // The field only moves on a step; on screens above 60 Hz, frames without one would redraw the same picture.
     if (steps || this.stale) {
       this.stale = false;
       this.draw();
@@ -251,23 +251,23 @@ export class FlowerEngine {
     const head = this.pointerInk.motion;
     if (!head || head.speed < STILL) return this.stopTrail();
     this.trailAt = head;
-    this.events.emit({ type: "trail", ...head, width: this.garden.width, height: this.garden.height });
+    this.events.emit({ type: "trail", ...head, width: this.field.width, height: this.field.height });
   }
 
   private stopTrail() {
     if (!this.trailAt) return;
     const { x, y } = this.trailAt;
     this.trailAt = null;
-    this.events.emit({ type: "trail", x, y, speed: 0, width: this.garden.width, height: this.garden.height });
+    this.events.emit({ type: "trail", x, y, speed: 0, width: this.field.width, height: this.field.height });
   }
 
   private onMotionPreference = () => {
     if (this.reducedMotion.matches) {
       cancelAnimationFrame(this.raf);
       this.stopTrail();
-      this.garden.endSpawn();
-      this.garden.insects.reset();
-      this.garden.petals.reset();
+      this.field.endSpawn();
+      this.field.insects.reset();
+      this.field.petals.reset();
       this.pointerInk.reset();
       this.draw();
     } else {
@@ -281,9 +281,9 @@ export class FlowerEngine {
     const y = e.clientY - rect.top;
     // After a pause or a lifted touch, the pointer may come back anywhere.
     const fresh = e.timeStamp - this.lastPointer > 150;
-    if (fresh) this.garden.releasePointer();
+    if (fresh) this.field.releasePointer();
     this.lastPointer = e.timeStamp;
-    this.garden.movePointer(x, y);
+    this.field.movePointer(x, y);
     if (!this.reducedMotion.matches) this.pointerInk.move(x, y, fresh);
   };
 
@@ -292,8 +292,8 @@ export class FlowerEngine {
     const rect = this.canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    const tapped = this.garden.tap(x, y);
-    if (tapped) this.events.emit({ ...tapped, x, y, width: this.garden.width, height: this.garden.height });
+    const tapped = this.field.tap(x, y);
+    if (tapped) this.events.emit({ ...tapped, x, y, width: this.field.width, height: this.field.height });
   };
 }
 
@@ -329,7 +329,7 @@ function oppositeRamp({ light, ink, dark }: HalftoneColors) {
   return { light: opposite(light), ink: opposite(ink), dark: opposite(dark) };
 }
 
-/** The settings the bed is laid out from, as a string to compare. */
-function bedKey({ layout, species, mix, tone }: FlowerSettings) {
+/** The settings the field is laid out from, as a string to compare. */
+function layoutKey({ layout, species, mix, tone }: FlowerSettings) {
   return JSON.stringify([layout, species, mix, tone]);
 }

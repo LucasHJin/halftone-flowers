@@ -91,7 +91,7 @@ export interface Heart {
   tilt: number;
   /** 1 to draw its left lobe first, -1 its right. */
   hand: number;
-  /** Garden time sent; seconds to draw, the share of that on the line in; seconds to swell and fade; swell as a share of its size. */
+  /** Field time sent; seconds to draw, the share of that on the line in; seconds to swell and fade; swell as a share of its size. */
   born: number;
   draw: number;
   lead: number;
@@ -104,7 +104,7 @@ export function topOf(b: Insect): Point {
   return [b.x, b.y + b.bob - TOP * b.size * lerp(0.85, 1.1, clamp(b.z, 0, 1))];
 }
 
-/** A new heart from `b` at garden time `now`; `bloom` is px per base flower size. */
+/** A new heart from `b` at field time `now`; `bloom` is px per base flower size. */
 export function sendHeart(b: Insect, bloom: number, settings: HeartSettings, now: number): Heart {
   const pick = ([lo, hi]: [number, number]) => lerp(lo, hi, Math.random());
   const [x, y] = topOf(b);
@@ -142,7 +142,7 @@ export function sendHeart(b: Insect, bloom: number, settings: HeartSettings, now
   };
 }
 
-/** Keeps the line's start on its insect while the line in draws. Returns whether it's still showing at garden time `now`. */
+/** Keeps the line's start on its insect while the line in draws. Returns whether it's still showing at field time `now`. */
 export function follow(h: Heart, now: number, insects: readonly Insect[]) {
   const age = now - h.born;
   if (h.from && age < h.draw * h.lead && insects.includes(h.from)) [h.x, h.y] = topOf(h.from);
@@ -150,7 +150,7 @@ export function follow(h: Heart, now: number, insects: readonly Insect[]) {
   return age < h.draw + h.fade;
 }
 
-/** Paints it at garden time `now` in the trail's width and strength, moved `shade` along the ramp. */
+/** Paints it at field time `now` in the trail's width and strength, moved `shade` along the ramp. */
 export function paintHeart(ctx: CanvasRenderingContext2D, h: Heart, now: number, settings: TrailSettings, shade: number) {
   const age = now - h.born;
   const drawn = age / h.draw;

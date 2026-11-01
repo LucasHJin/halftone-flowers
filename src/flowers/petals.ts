@@ -6,7 +6,7 @@
  * each at its own depth. None fade out; each drifts until it is off screen.
  */
 import { clamp, lerp, TAU } from "../utils/math.js";
-import type { Garden } from "./garden.js";
+import type { Field } from "./field.js";
 import { ease, smoothstep, wrap } from "./insects/insect.js";
 import { looseLook, petalAt, petalIndices, type LoosePaint } from "./paint/loose.js";
 import { aimLight, inAccent, inLight, inShade, lightStrength, plantShade } from "./paint/tone.js";
@@ -61,7 +61,7 @@ const SWELL = 2;
 /** A puffed petal's starting size, as a share of its loose size. */
 const SEED = 0.2;
 
-/** A petal queued to come off: petal `k` of `stem`'s head, at garden time `at`. */
+/** A petal queued to come off: petal `k` of `stem`'s head, at field time `at`. */
 interface Coming {
   plant: Plant;
   stem: Stem;
@@ -182,7 +182,7 @@ export class Petals {
   private order: LoosePetal[] = [];
   private next = 0;
 
-  constructor(private garden: Garden) {}
+  constructor(private field: Field) {}
 
   reset() {
     this.list = [];
@@ -204,20 +204,20 @@ export class Petals {
     // A peony's outer petals go first.
     if (h.kind === "peony") left = left.slice(0, 3);
     const away = left.map((k) => {
-      const at = petalAt(s, h, k, this.garden.time);
+      const at = petalAt(s, h, k, this.field.time);
       return Math.hypot(at.x - x, at.y - y);
     });
     const nearest = Math.min(...away);
     if (nearest > h.radius * REACH) return null;
     const near = left.filter((_, i) => away[i] <= nearest + h.radius * NEAR);
     const k = near[Math.floor(Math.random() * near.length)];
-    this.coming.push({ plant, stem: s, k, at: this.garden.time + lerp(0.05, 0.15, Math.random()), tap: [x, y] });
+    this.coming.push({ plant, stem: s, k, at: this.field.time + lerp(0.05, 0.15, Math.random()), tap: [x, y] });
     return remaining;
   }
 
   /** Takes petal `k` off its head, starting loose where it was, at its angle and size there. */
   private loosen({ plant, stem: s, k, tap }: Coming) {
-    const { cell, settings, time, bloom } = this.garden;
+    const { cell, settings, time, bloom } = this.field;
     const { size, sink, wait, turn } = settings.petals;
     const h = s.head!;
     h.lost.add(k);
@@ -257,7 +257,7 @@ export class Petals {
 
   /** Tiny copies of petals off up to `SOURCES` random flowers burst out all round (x, y). Returns how many. */
   puff(x: number, y: number) {
-    const { cell, settings, bloom, plants } = this.garden;
+    const { cell, settings, bloom, plants } = this.field;
     const { count, size, reach } = settings.splash;
     const { sink } = settings.petals;
     const heads = plants.flatMap((plant) => plant.stems.filter((s) => s.head && petalIndices(s, s.head).length).map((stem) => ({ plant, stem })));
@@ -301,11 +301,11 @@ export class Petals {
   }
 
   step(dt: number) {
-    const garden = this.garden;
-    const { speed, loops } = garden.settings.petals;
+    const field = this.field;
+    const { speed, loops } = field.settings.petals;
     const calming = Math.exp(-dt / PUFF);
     this.coming = this.coming.filter((c) => {
-      if (c.at > garden.time) return true;
+      if (c.at > field.time) return true;
       this.loosen(c);
       return false;
     });
@@ -315,7 +315,7 @@ export class Petals {
       p.age += dt;
       if (p.peel) this.peel(p, p.peel);
       // Faster and flatter in a gust either way, and faster heading down than up, as if it had some weight.
-      const push = clamp(Math.abs(garden.windNow(p.x, p.y)), 0, 1.5);
+      const push = clamp(Math.abs(field.windNow(p.x, p.y)), 0, 1.5);
       p.speed = ease(p.speed, p.cruise * speed * (0.6 + 0.5 * push) * (1 + 0.3 * Math.sin(p.heading)), 0.6, dt);
       const below = p.aim * (1 - 0.3 * Math.min(push, 1));
       const aim = p.side > 0 ? below : Math.PI - below;
@@ -347,7 +347,7 @@ export class Petals {
       p.kick[0] *= calming;
       p.kick[1] *= calming;
     }
-    const { width: W, height: H } = garden;
+    const { width: W, height: H } = field;
     this.list = this.list.filter((p) => p.x > -p.length && p.x < W + p.length && p.y < H + p.length && p.y > -H);
   }
 
@@ -363,7 +363,7 @@ export class Petals {
       p.carry = [0, 0, 0];
       return;
     }
-    const at = petalAt(stem, h, k, this.garden.time);
+    const at = petalAt(stem, h, k, this.field.time);
     const hold = 1 - smoothstep(0, RELEASE, p.age);
     p.carry = [(at.x - x) * hold, (at.y - y) * hold, wrap(at.a - a) * hold];
   }
@@ -394,7 +394,7 @@ export class Petals {
     // Rolling narrows it, but never below 0.55 of its width, so its shape still shows.
     ctx.scale(grown, grown * Math.max(Math.abs(face), 0.55));
     // Puffed ones print lighter the further back, like insects; shed ones in their plant's shade.
-    const { shade } = this.garden.settings;
+    const { shade } = this.field.settings;
     const by = p.puffed ? shade.depth * (p.z - 1) : plantShade(p.plant, shade);
     // Its sides lit as they face now; its inner face (`face` > 0) prints lighter than its back.
     aimLight(p.spin);
@@ -407,7 +407,7 @@ export class Petals {
       paint();
       // Accent layered inside `FRONT_STEPS` shrinking circles about the click, stronger inward, so the front is soft.
       // The radius follows `shares`, so area turns at an even rate instead of racing across the broad middle.
-      const depth = FRONT * this.garden.cell;
+      const depth = FRONT * this.field.cell;
       const at = turned * SHARES;
       const k = Math.floor(at);
       const r = lerp(shares[k], shares[k + 1], at - k) + depth * turned;

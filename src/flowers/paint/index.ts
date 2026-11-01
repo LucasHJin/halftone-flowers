@@ -1,11 +1,11 @@
 /**
- * Paints the garden as a tone image: red is how much ink a spot wants, green is
+ * Paints the field as a tone image: red is how much ink a spot wants, green is
  * red times its place on the colour ramp (0 light, 1 dark). The halftone pass
  * turns these into dot sizes and shades. Later shapes replace earlier ones, so
  * a petal over a stem hides it. Heads are drawn in a frame at the stem's tip,
  * rotated so local -y runs out along the stem.
  */
-import type { Garden } from "../garden.js";
+import type { Field } from "../field.js";
 import { spawnColor, spawnFront } from "../spawn.js";
 import type { ShadeSettings } from "../settings.js";
 import { SEGMENTS } from "../stem.js";
@@ -32,29 +32,29 @@ interface Movers {
   paintNext(ctx: CanvasRenderingContext2D): void;
 }
 
-/** Paints the garden's tone image, or with `mask`, the spawn mask in the same shapes, without insects or petals. */
-export function paintGarden(ctx: CanvasRenderingContext2D, garden: Garden, mask = false) {
-  const growing = garden.growing;
-  const plan = garden.spawnPlan;
-  const { shade } = garden.settings;
-  const movers: Movers[] = mask ? [] : [garden.insects, garden.petals];
+/** Paints the field's tone image, or with `mask`, the spawn mask in the same shapes, without insects or petals. */
+export function paintField(ctx: CanvasRenderingContext2D, field: Field, mask = false) {
+  const growing = field.growing;
+  const plan = field.spawnPlan;
+  const { shade } = field.settings;
+  const movers: Movers[] = mask ? [] : [field.insects, field.petals];
   setLight(shade.light);
   for (const m of movers) m.beginPaint();
-  for (const plant of garden.plants) {
+  for (const plant of field.plants) {
     paintMovers(ctx, movers, plant.depth);
     if (growing === null || !plan || !plant.spawn) {
-      paintPlant(ctx, plant, garden.time, shade, !mask);
+      paintPlant(ctx, plant, field.time, shade, !mask);
       continue;
     }
-    const front = spawnFront(plant, growing, garden.height);
+    const front = spawnFront(plant, growing, field.height);
     if (front >= plant.stems[0].rootY) continue;
     ctx.save();
     ctx.beginPath();
     // Cut off above the growing front. The bottom edge stays below the roots however far up `front` climbs.
-    ctx.rect(-garden.width, front, garden.width * 3, garden.height * 2 - front);
+    ctx.rect(-field.width, front, field.width * 3, field.height * 2 - front);
     ctx.clip();
-    if (mask) inMask(spawnColor(plant, plan), () => paintPlant(ctx, plant, garden.time, shade, false));
-    else paintPlant(ctx, plant, garden.time, shade);
+    if (mask) inMask(spawnColor(plant, plan), () => paintPlant(ctx, plant, field.time, shade, false));
+    else paintPlant(ctx, plant, field.time, shade);
     ctx.restore();
   }
   paintMovers(ctx, movers, Infinity);
@@ -71,8 +71,8 @@ function paintMovers(ctx: CanvasRenderingContext2D, movers: Movers[], depth: num
 }
 
 /** Paints each plant flat in `colour(plant)`, nearer over further, fully grown, without insects or leaving petals. */
-export function paintSilhouettes(ctx: CanvasRenderingContext2D, garden: Garden, colour: (plant: Plant) => string) {
-  for (const plant of garden.plants) inMask(colour(plant), () => paintPlant(ctx, plant, garden.time, garden.settings.shade, false));
+export function paintSilhouettes(ctx: CanvasRenderingContext2D, field: Field, colour: (plant: Plant) => string) {
+  for (const plant of field.plants) inMask(colour(plant), () => paintPlant(ctx, plant, field.time, field.settings.shade, false));
 }
 
 function paintPlant(ctx: CanvasRenderingContext2D, plant: Plant, t: number, shade: ShadeSettings, fading = true) {

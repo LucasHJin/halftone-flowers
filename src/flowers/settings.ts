@@ -46,7 +46,7 @@ export interface LayoutSettings {
 /** Relative odds of each kind; leave a kind out or set it to 0 to never grow it. */
 export type Mix = Partial<Record<Kind, number>>;
 
-/** How strongly each part prints at the back and the front of the bed, so nearer things read darker. */
+/** How strongly each part prints at the back and the front of the field, so nearer things read darker. */
 export interface ToneSettings {
   flowers: [number, number];
   stems: [number, number];
@@ -55,7 +55,7 @@ export interface ToneSettings {
 
 /** How each plant's colours shift along the light-to-dark ramp, so overlapping plants print in different shades. */
 export interface ShadeSettings {
-  /** How much lighter the back of the bed prints than the front, as a share of the ramp. */
+  /** How much lighter the back of the field prints than the front, as a share of the ramp. */
   depth: number;
   /** Most each plant strays from that at random, either way, as a share of the ramp. */
   jitter: number;
@@ -63,7 +63,7 @@ export interface ShadeSettings {
   light: number;
 }
 
-/** One wave of wind rolling across the bed from the left. */
+/** One wave of wind rolling across the field from the left. */
 export interface WindWave {
   /** How hard it blows at its crest, in the same units as `lean`. */
   strength: number;
@@ -78,7 +78,7 @@ export interface WindWave {
 }
 
 export interface WindSettings {
-  /** Steady push to the right (negative: left), so the bed leans with the wind; 0 sways evenly both ways. */
+  /** Steady push to the right (negative: left), so the field leans with the wind; 0 sways evenly both ways. */
   lean: number;
   /** Summed on top of `lean`. */
   waves: WindWave[];
@@ -107,7 +107,7 @@ export interface CursorSettings {
 }
 
 export interface SpawnSettings {
-  /** Grow the bed in when it first appears; false shows it all at once. */
+  /** Grow the field in when it first appears; false shows it all at once. */
   enabled: boolean;
   /** Seconds from the first plant starting to the last one fully in. */
   duration: number;
@@ -151,7 +151,7 @@ export interface InsectSettings {
   enabled: boolean;
   /** Average seconds between one arriving and the next. */
   every: number;
-  /** Most in the bed at once. */
+  /** Most in the field at once. */
   most: number;
   /** Relative odds of a butterfly and a bee each time one comes. */
   odds: [number, number];
@@ -207,7 +207,7 @@ export interface PointerTrailSettings extends TrailSettings {
 
 /**
  * Tiny petals that puff out from a click or tap that misses the flowers: copies
- * of petals from a few flowers in the bed, in the pointer trail's colours. They
+ * of petals from a few flowers in the field, in the pointer trail's colours. They
  * then drift away like shed petals, with `petals`' `speed`, `sink` and `loops`.
  */
 export interface SplashSettings {

@@ -9,7 +9,7 @@ export type InsectKind = "butterfly" | "bee";
 /** Flying to a flower, hovering by it, coming down onto it, sitting on it, or heading off screen. */
 export type Phase = "flying" | "hovering" | "alighting" | "landed" | "leaving";
 
-/** How many of an insect's sizes it flies to cross the bed from back to front. */
+/** How many of an insect's sizes it flies to cross the field from back to front. */
 export const DEPTH = 5;
 
 /** An insect's radius as a share of its size; within this of a flower's head, it's over it. */

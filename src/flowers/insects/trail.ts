@@ -10,7 +10,7 @@ export interface TrailPoint {
   x: number;
   y: number;
   z: number;
-  /** Garden time it was laid down, seconds. */
+  /** Field time it was laid down, seconds. */
   t: number;
 }
 

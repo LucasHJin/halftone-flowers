@@ -29,7 +29,7 @@ interface PathPoint {
   ny: number;
   /** Px along the trail from its start. */
   s: number;
-  /** Garden time it was laid down. */
+  /** Field time it was laid down. */
   t: number;
 }
 
@@ -71,7 +71,7 @@ export class PointerInk {
   }
 
   /**
-   * Advances the head `dt` s to garden time `now`, laying a point every
+   * Advances the head `dt` s to field time `now`, laying a point every
    * `SPACING` px. It chases the pointer as a critically damped spring, so it
    * never overshoots and sharp turns come out rounded.
    */

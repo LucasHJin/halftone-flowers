@@ -109,7 +109,7 @@ export interface Plant {
 
 /** A front of growth climbing a plant from the ground up, at a steady pace. */
 export interface Spawn {
-  /** Seconds after the bed starts growing in that the front crosses the bottom of the screen. */
+  /** Seconds after the field starts growing in that the front crosses the bottom of the screen. */
   bottom: number;
   /** Seconds the front takes to climb one px. */
   pace: number;

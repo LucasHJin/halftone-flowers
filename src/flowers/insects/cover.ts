@@ -3,7 +3,7 @@
  * with each plant painted flat, nearer over further, its red set by `level`.
  */
 import { clamp } from "../../utils/math.js";
-import type { Garden } from "../garden.js";
+import type { Field } from "../field.js";
 import { paintSilhouettes } from "../paint/index.js";
 
 /** Map px per screen px. */
@@ -20,15 +20,15 @@ export class Cover {
   private width = 0;
   private height = 0;
 
-  /** Repaints the map from the bed as currently posed. */
-  paint(garden: Garden) {
+  /** Repaints the map from the field as currently posed. */
+  paint(field: Field) {
     if (!this.ctx) {
       this.ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
       if (!this.ctx) throw new Error("2D canvas unavailable");
     }
     const ctx = this.ctx;
-    const w = Math.max(1, Math.ceil(garden.width * SCALE));
-    const h = Math.max(1, Math.ceil(garden.height * SCALE));
+    const w = Math.max(1, Math.ceil(field.width * SCALE));
+    const h = Math.max(1, Math.ceil(field.height * SCALE));
     if (ctx.canvas.width !== w || ctx.canvas.height !== h) {
       ctx.canvas.width = w;
       ctx.canvas.height = h;
@@ -37,7 +37,7 @@ export class Cover {
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, w, h);
     ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
-    paintSilhouettes(ctx, garden, (plant) => `rgb(${level(plant.depth)},0,0)`);
+    paintSilhouettes(ctx, field, (plant) => `rgb(${level(plant.depth)},0,0)`);
     this.data = ctx.getImageData(0, 0, w, h).data;
     this.width = w;
     this.height = h;

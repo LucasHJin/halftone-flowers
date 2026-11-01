@@ -1,5 +1,5 @@
 /**
- * The bed: a tall bouquet rooted in the bottom-left corner reaching up and
+ * The field: a tall bouquet rooted in the bottom-left corner reaching up and
  * right, a low meadow along the bottom, and grass. Each stem sways on a damped
  * spring driven by the wind plus the pointer's breeze.
  */
@@ -21,7 +21,7 @@ const THICKER_FROM = 0.3;
 /** A click or tap nudges a flower as hard as brushing this many px across it. */
 const TAP = 12;
 
-export interface GardenLayout {
+export interface FieldLayout {
   width: number;
   height: number;
   /** Diamond width, px; thin parts are kept at least about half of it wide so they print. */
@@ -33,14 +33,14 @@ export interface GardenLayout {
   spawn: boolean;
 }
 
-export class Garden {
+export class Field {
   plants: Plant[] = [];
   time = 0;
   width = 0;
   height = 0;
   /** Multiplier on how far the wind bends things. */
   wind = 1;
-  /** Grow-in timings while the bed grows in, else null. */
+  /** Grow-in timings while the field grows in, else null. */
   spawnPlan: SpawnPlan | null = null;
   insects: Insects;
   /** Loose petals blowing away. */
@@ -74,7 +74,7 @@ export class Garden {
     this.hand = this.bloom * settings.cursor.reach;
   }
 
-  layout({ width: W, height: H, cell, seed, density, spawn }: GardenLayout) {
+  layout({ width: W, height: H, cell, seed, density, spawn }: FieldLayout) {
     this.width = W;
     this.height = H;
     this.cell = cell;
@@ -87,7 +87,7 @@ export class Garden {
     this.bloom = clamp(Math.min(W, H) * flowerSize.share, flowerSize.min, flowerSize.max);
     this.stemWidth = Math.max(cell * 0.55, Math.min(W, H) * 0.004);
     this.hand = this.bloom * this.settings.cursor.reach;
-    // Counts depend on width only, so a phone's URL bar resizing the height doesn't reshuffle the bed.
+    // Counts depend on width only, so a phone's URL bar resizing the height doesn't reshuffle the field.
     const count = Math.round(clamp(W / stems.spacing, stems.min, stems.max) * density);
 
     // Bouquet: heads land in a quarter-ellipse from the corner, densest near it.
@@ -141,7 +141,7 @@ export class Garden {
     }
 
     // Extra meadow stems toward its short right end, so it doesn't thin out into an even row. Drawn last from the seed,
-    // so changing `thicken` doesn't reshuffle the rest of the bed.
+    // so changing `thicken` doesn't reshuffle the rest of the field.
     const extra = shortKinds.length ? Math.round(low * meadow.thicken * (1 - THICKER_FROM) / 2) : 0;
     for (let i = 0; i < extra; i++) {
       const depth = rand();
@@ -166,7 +166,7 @@ export class Garden {
     this.spawnFrom = null;
     this.spawnPlan = spawn ? planSpawn(this.plants, W, H, seed, this.settings.spawn) : null;
     if (spawn) this.spawnFrom = this.time;
-    // Insects and loose petals belong to the old bed.
+    // Insects and loose petals belong to the old field.
     this.insects.reset();
     this.petals.reset();
   }
@@ -276,7 +276,7 @@ export class Garden {
     p.y = y;
   }
 
-  /** Forgets the pointer, so its next position isn't read as a sweep across the bed. */
+  /** Forgets the pointer, so its next position isn't read as a sweep across the field. */
   releasePointer() {
     this.pointer.live = false;
   }

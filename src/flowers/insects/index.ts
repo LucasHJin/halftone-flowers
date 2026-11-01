@@ -5,7 +5,7 @@
  * where nearer plants don't hide it.
  */
 import { clamp, lerp, TAU } from "../../utils/math.js";
-import type { Garden } from "../garden.js";
+import type { Field } from "../field.js";
 import { inAccent, inShade } from "../paint/tone.js";
 import type { Plant, Stem } from "../types.js";
 import { BEE } from "./bee.js";
@@ -55,7 +55,7 @@ export class Insects {
   private next = 0;
   private cover = new Cover();
 
-  constructor(private garden: Garden) {
+  constructor(private field: Field) {
     this.reset();
   }
 
@@ -68,7 +68,7 @@ export class Insects {
 
   /** Sends one in now, ignoring `wait` and `settings.most`; without `kind`, picks one by `settings.odds`. */
   release(kind?: InsectKind) {
-    const settings = this.garden.settings.insects;
+    const settings = this.field.settings.insects;
     const [butterflies, bees] = settings.odds;
     if (!kind) {
       if (butterflies + bees <= 0) return;
@@ -77,7 +77,7 @@ export class Insects {
     const group = GROUPS[kind];
     const species = pick(group.species.map((sp) => sp.odds));
     const sp = group.species[species];
-    const size = this.garden.bloom * group.size * sp.size * settings.size * lerp(0.9, 1.3, Math.random());
+    const size = this.field.bloom * group.size * sp.size * settings.size * lerp(0.9, 1.3, Math.random());
     const quirks = randomQuirks();
     quirks.pace *= sp.pace;
     const from = this.pickEdge();
@@ -127,7 +127,7 @@ export class Insects {
     const goal = b.stem ? { ...perch(b.stem), z: b.plant!.depth } : { x: b.exitX, y: b.exitY, z: b.zGoal };
     if (from === "top" && b.stem) {
       // Start on the roomier side of its flower, far enough out to descend no steeper than `flight.dive`.
-      const W = this.garden.width;
+      const W = this.field.width;
       const out = size * 1.5;
       x = clamp(goal.x + Math.sign(W / 2 - goal.x || 1) * ((goal.y - y) / Math.tan(group.flight.dive)), -out, W + out);
       b.x = x;
@@ -150,7 +150,7 @@ export class Insects {
     let hit: Insect | null = null;
     for (const b of this.list) {
       // Wider than its body: it's small and moving.
-      if (Math.hypot(x - b.x, y - b.y - b.bob) > Math.max(b.size * 0.7, this.garden.cell * 3)) continue;
+      if (Math.hypot(x - b.x, y - b.y - b.bob) > Math.max(b.size * 0.7, this.field.cell * 3)) continue;
       if (cover.hidden(x, y, 2, b.z) > 0.5 || (hit && hit.z > b.z)) continue;
       hit = b;
     }
@@ -159,16 +159,16 @@ export class Insects {
 
   /** Sends a heart up out of `b`. False if `HEARTS` are already up. */
   love(b: Insect) {
-    const { bloom, settings, time } = this.garden;
+    const { bloom, settings, time } = this.field;
     if (this.hearts.length >= HEARTS) return false;
     this.hearts.push(sendHeart(b, bloom, settings.insects.heart, time));
     return true;
   }
 
   step(dt: number) {
-    const garden = this.garden;
-    const settings = garden.settings.insects;
-    if (garden.growing === null && settings.enabled) {
+    const field = this.field;
+    const settings = field.settings.insects;
+    if (field.growing === null && settings.enabled) {
       this.wait -= dt;
       if (this.wait <= 0) {
         this.wait = this.gap();
@@ -184,9 +184,9 @@ export class Insects {
       b.trail.owner = null;
       return false;
     });
-    for (const t of this.trails) expire(t, garden.time, settings.trail.fade);
+    for (const t of this.trails) expire(t, field.time, settings.trail.fade);
     this.trails = this.trails.filter((t) => t.owner || t.points.length > 1);
-    this.hearts = this.hearts.filter((h) => follow(h, garden.time, this.list));
+    this.hearts = this.hearts.filter((h) => follow(h, field.time, this.list));
   }
 
   /** Gathers everything to paint in depth order, ready for paintNext. */
@@ -209,7 +209,7 @@ export class Insects {
   }
 
   paintNext(ctx: CanvasRenderingContext2D) {
-    const { settings, time } = this.garden;
+    const { settings, time } = this.field;
     const shade = settings.shade.depth;
     const { insect, trail, i, heart } = this.parts[this.next++];
     if (trail) paintSegment(ctx, trail, i, time, settings.insects.trail, shade);
@@ -225,7 +225,7 @@ export class Insects {
   }
 
   private fly(b: Insect, dt: number) {
-    const settings = this.garden.settings.insects;
+    const settings = this.field.settings.insects;
     const group = GROUPS[b.kind];
     const style = group.flight;
     const speed = style.cruise * b.size * b.quirks.pace * settings.speed;
@@ -291,7 +291,7 @@ export class Insects {
     if (b.last && clearOf(b.last.stem, b.x, b.y) > b.size * 2) b.last = null;
     orient(b, style, dt, face);
     group.animate(b, dt, settings.speed);
-    if (b.phase !== "landed" && settings.trail.fade > 0) extend(b.trail, b.x, b.y + b.bob, b.z, this.garden.time);
+    if (b.phase !== "landed" && settings.trail.fade > 0) extend(b.trail, b.x, b.y + b.bob, b.z, this.field.time);
   }
 
   /** Flowers it mustn't pass through: `b.last` and the one it's after. */
@@ -346,12 +346,12 @@ export class Insects {
 
   /** Whether the flower it's after is hidden, repainting `cover` first. */
   private hiddenNow(b: Insect) {
-    this.cover.paint(this.garden);
+    this.cover.paint(this.field);
     return this.hides(b, b.plant!, b.stem!);
   }
 
   private land(b: Insect) {
-    const [lo, hi] = this.garden.settings.insects.stay;
+    const [lo, hi] = this.field.settings.insects.stay;
     b.phase = "landed";
     b.timer = lerp(lo, hi, Math.random());
     b.vx = b.vy = b.vz = 0;
@@ -372,7 +372,7 @@ export class Insects {
   /** Heads for its next flower, or leaves if out of visits or flowers: by the far side if it just came in by `from`. */
   private moveOn(b: Insect, from?: Edge) {
     const target = b.visits > 0 ? this.pickFlower(b) : null;
-    if (!target) return this.leave(b, from && (from === "left" ? "right" : from === "right" ? "left" : b.x < this.garden.width / 2 ? "right" : "left"));
+    if (!target) return this.leave(b, from && (from === "left" ? "right" : from === "right" ? "left" : b.x < this.field.width / 2 ? "right" : "left"));
     b.visits--;
     b.phase = "flying";
     b.hovers = Math.random() < GROUPS[b.kind].flight.hovers;
@@ -405,7 +405,7 @@ export class Insects {
 
   private gone(b: Insect) {
     const m = b.size * 1.6;
-    const { width, height } = this.garden;
+    const { width, height } = this.field;
     return b.phase === "leaving" && (b.x < -m || b.x > width + m || b.y < -m || b.y > height + m);
   }
 
@@ -414,13 +414,13 @@ export class Insects {
    * `likes`, closeness and nearness to the front; 20x rarer if another insect is after it.
    */
   private pickFlower(b: Insect): Flower | null {
-    const { width: W, height: H } = this.garden;
+    const { width: W, height: H } = this.field;
     const likes = GROUPS[b.kind].flight.likes;
     const m = b.size;
     const options: { plant: Plant; stem: Stem; weight: number }[] = [];
     let total = 0;
-    this.cover.paint(this.garden);
-    for (const plant of this.garden.plants) {
+    this.cover.paint(this.field);
+    for (const plant of this.field.plants) {
       for (const stem of plant.stems) {
         const like = stem.head ? likes[stem.head.kind] ?? 0 : 0;
         if (like <= 0 || stem === b.stem) continue;
@@ -448,14 +448,14 @@ export class Insects {
 
   /** A random point `out` px past `edge`; on a side, 8% to 60% of the way down. */
   private offEdge(edge: Edge, out: number): [number, number] {
-    const { width: W, height: H } = this.garden;
+    const { width: W, height: H } = this.field;
     if (edge === "top") return [W * lerp(0.15, 1, Math.random()), -out];
     return [edge === "left" ? -out : W + out, H * lerp(0.08, 0.6, Math.random())];
   }
 
   /** Seconds to the next arrival: exponential with mean `every`, clamped to 0.3 to 2.5 times it. */
   private gap() {
-    return this.garden.settings.insects.every * clamp(-Math.log(1 - Math.random()), 0.3, 2.5);
+    return this.field.settings.insects.every * clamp(-Math.log(1 - Math.random()), 0.3, 2.5);
   }
 }
 
