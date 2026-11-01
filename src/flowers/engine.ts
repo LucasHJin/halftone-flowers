@@ -5,7 +5,7 @@ import { FieldEmitter } from "./events.js";
 import { Field } from "./field.js";
 import type { InsectKind } from "./insects/index.js";
 import { paintField } from "./paint/index.js";
-import { PointerInk } from "./pointerInk.js";
+import { Mark, type PointerMark } from "./pointerMark.js";
 import { resolveSettings, type FlowerSettings, type FlowerSettingsInput } from "./settings.js";
 import { spawnScale } from "./spawn.js";
 
@@ -66,20 +66,27 @@ export interface FlowerFieldOptions {
   density?: number;
   /** Fixes the arrangement. Unset, each mount grows a different field. */
   seed?: number;
+  /**
+   * Prints the pointer into the field in place of the system cursor, at the trail's depth, so it
+   * passes behind some flowers and in front of others. Only for a mouse or pen over the canvas itself,
+   * and not with reduced motion. `true` prints a dot; a `PointerMark` can print your own cursor. Default off.
+   */
+  pointer?: boolean | PointerMark;
   /** Fine tuning; see `DEFAULT_SETTINGS`. Anything left out keeps its default. */
   settings?: FlowerSettingsInput;
 }
 
 /**
  * Runs a field on a canvas on a fixed-timestep loop, paused off-screen. With prefers-reduced-motion
- * it draws still frames, without insects, loose petals or the pointer trail. Reports clicks and the
+ * it draws still frames, without insects, loose petals or the pointer trail and mark. Reports clicks and the
  * trail through `events`.
  */
 export class FlowerEngine {
   private settings: FlowerSettings;
   private field: Field;
   private halftone: DiamondHalftone;
-  private pointerInk: PointerInk;
+  /** Kept across option changes, so its image loads once. */
+  private mark = new Mark();
   private seed: number;
   private raf = 0;
   private last = 0;
@@ -90,6 +97,12 @@ export class FlowerEngine {
   private disposed = false;
   private laidOut = "";
   private lastPointer = 0;
+  /** Where the pointer last was in the viewport, to place it again after a scroll. */
+  private client: { x: number; y: number; type: string } | null = null;
+  /** Where the pointer last was on the canvas. */
+  private at = { x: NaN, y: NaN };
+  /** The canvas's own `style.cursor`, while it's replaced with `none`; else null. */
+  private ownCursor: string | null = null;
   /** Where the last `trail` event put the head, or null once one at speed 0 has gone out. */
   private trailAt: { x: number; y: number } | null = null;
   private reducedMotion: MediaQueryList;
@@ -108,7 +121,6 @@ export class FlowerEngine {
     this.settings = resolveSettings(options.settings);
     this.field = new Field(this.settings);
     this.field.wind = options.wind ?? 1;
-    this.pointerInk = new PointerInk(this.settings);
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -121,9 +133,12 @@ export class FlowerEngine {
 
     this.reducedMotion.addEventListener("change", this.onMotionPreference);
     window.addEventListener("pointermove", this.onPointerMove, { passive: true });
+    window.addEventListener("pointerout", this.onPointerOut, { passive: true });
+    window.addEventListener("scroll", this.onScroll, { capture: true, passive: true });
     // On the canvas, so clicks on anything laid over it don't count.
     canvas.addEventListener("pointerdown", this.onPointerDown);
 
+    this.setPointer(options.pointer);
     this.resize();
     this.schedule();
   }
@@ -148,7 +163,7 @@ export class FlowerEngine {
     this.settings = settings;
     this.field.configure(settings);
     this.field.wind = options.wind ?? 1;
-    this.pointerInk.settings = settings;
+    this.setPointer(options.pointer);
     this.halftone.colors = schemeColors(options.colors, options.scheme);
     this.halftone.accent = oppositeRamp(this.halftone.colors);
     this.setDots(options);
@@ -165,13 +180,34 @@ export class FlowerEngine {
   destroy() {
     this.disposed = true;
     this.stopTrail();
+    this.showCursor(true);
     this.halftone.destroy();
     cancelAnimationFrame(this.raf);
     this.resizeObserver.disconnect();
     this.intersectionObserver.disconnect();
     this.reducedMotion.removeEventListener("change", this.onMotionPreference);
     window.removeEventListener("pointermove", this.onPointerMove);
+    window.removeEventListener("pointerout", this.onPointerOut);
+    window.removeEventListener("scroll", this.onScroll, { capture: true });
     this.canvas.removeEventListener("pointerdown", this.onPointerDown);
+  }
+
+  private setPointer(pointer: FlowerFieldOptions["pointer"]) {
+    if (pointer) this.mark.set(pointer === true ? {} : pointer);
+    this.field.pointerInk.mark = pointer ? this.mark : null;
+    this.showCursor(!pointer || this.reducedMotion.matches);
+  }
+
+  /** Puts back the canvas's own cursor, or hides it while the mark stands in for it. */
+  private showCursor(show: boolean) {
+    const style = this.canvas.style;
+    if (show && this.ownCursor !== null) {
+      style.cursor = this.ownCursor;
+      this.ownCursor = null;
+    } else if (!show && this.ownCursor === null) {
+      this.ownCursor = style.cursor;
+      style.cursor = "none";
+    }
   }
 
   /** The spread reaches the canvas only on `applyInk` or a resize. */
@@ -189,7 +225,6 @@ export class FlowerEngine {
     const { field, halftone } = this;
     const scene = halftone.beginScene();
     paintField(scene, field);
-    this.pointerInk.paintTrail(scene, field.time);
     const growing = field.growing;
     if (growing === null) return halftone.present();
     paintField(halftone.beginReveal(), field, true);
@@ -232,7 +267,6 @@ export class FlowerEngine {
     let steps = 0;
     while (this.acc >= STEP && steps < MAX_STEPS) {
       this.field.step(STEP);
-      this.pointerInk.step(STEP, this.field.time);
       this.acc -= STEP;
       steps++;
     }
@@ -248,7 +282,7 @@ export class FlowerEngine {
 
   private emitTrail() {
     if (!this.events.has("trail")) return;
-    const head = this.pointerInk.motion;
+    const head = this.field.pointerInk.motion;
     if (!head || head.speed < STILL) return this.stopTrail();
     this.trailAt = head;
     this.events.emit({ type: "trail", ...head, width: this.field.width, height: this.field.height });
@@ -268,24 +302,51 @@ export class FlowerEngine {
       this.field.endSpawn();
       this.field.insects.reset();
       this.field.petals.reset();
-      this.pointerInk.reset();
+      this.field.pointerInk.reset();
+      this.showCursor(true);
       this.draw();
     } else {
+      this.showCursor(!this.options.pointer);
       this.schedule();
     }
   };
 
   private onPointerMove = (e: PointerEvent) => {
-    const rect = this.canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    this.client = { x: e.clientX, y: e.clientY, type: e.pointerType };
     // After a pause or a lifted touch, the pointer may come back anywhere.
-    const fresh = e.timeStamp - this.lastPointer > 150;
-    if (fresh) this.field.releasePointer();
+    this.point(e.target, e.timeStamp - this.lastPointer > 150);
     this.lastPointer = e.timeStamp;
-    this.field.movePointer(x, y);
-    if (!this.reducedMotion.matches) this.pointerInk.move(x, y, fresh);
   };
+
+  /** Hides the mark once the pointer leaves the window. */
+  private onPointerOut = (e: PointerEvent) => {
+    if (!e.relatedTarget) this.field.pointerInk.hovering = false;
+  };
+
+  /** A scroll can move the field under a still pointer, or move something else over it. */
+  private onScroll = () => {
+    const c = this.client;
+    if (!c) return;
+    const rect = this.canvas.getBoundingClientRect();
+    // Unless the canvas stayed put, the pointer has jumped across it.
+    const jumped = Math.abs(c.x - rect.left - this.at.x) > 0.5 || Math.abs(c.y - rect.top - this.at.y) > 0.5;
+    if (jumped || this.field.pointerInk.mark) this.point(document.elementFromPoint(c.x, c.y), jumped);
+  };
+
+  /** The pointer is at `client` over `target`; `fresh` if it may have jumped there. */
+  private point(target: EventTarget | null, fresh: boolean) {
+    const c = this.client!;
+    const rect = this.canvas.getBoundingClientRect();
+    const x = c.x - rect.left;
+    const y = c.y - rect.top;
+    this.at = { x, y };
+    if (fresh) this.field.releasePointer();
+    this.field.movePointer(x, y);
+    if (this.reducedMotion.matches) return;
+    const ink = this.field.pointerInk;
+    ink.move(x, y, fresh);
+    ink.hovering = target === this.canvas && c.type !== "touch";
+  }
 
   private onPointerDown = (e: PointerEvent) => {
     if (!e.isPrimary || e.button !== 0 || this.reducedMotion.matches) return;

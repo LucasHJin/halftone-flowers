@@ -23,3 +23,4 @@ export {
 export type { Species } from "./species.js";
 export type { Kind, LeafShape } from "./types.js";
 export type { InsectKind } from "./insects/index.js";
+export type { PointerMark } from "./pointerMark.js";

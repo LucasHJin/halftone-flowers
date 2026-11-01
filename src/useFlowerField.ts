@@ -6,11 +6,14 @@ import { FlowerEngine, type FieldEmitter, type FlowerFieldOptions } from "./flow
  * to it. Option changes go through FlowerEngine.update; only a remount grows the field in again.
  */
 export function useFlowerField(canvasRef: RefObject<HTMLCanvasElement | null>, options: FlowerFieldOptions, events: FieldEmitter) {
-  const { cell, steps, sizes, shades, spread, threshold, dot, curve, grid, colors, scheme, wind, density, seed, settings } = options;
+  const { cell, steps, sizes, shades, spread, threshold, dot, curve, grid, colors, scheme, wind, density, seed, pointer, settings } = options;
   // Compared by value, so a new array or object literal each render isn't a change.
   const sizesKey = sizes?.join(",");
   const { background, ink, dark, light } = colors ?? {};
   const settingsKey = settings ? JSON.stringify(settings) : "";
+  const pointerOn = !!pointer;
+  const { image, hotspot, scale } = typeof pointer === "object" ? pointer : {};
+  const hotspotKey = hotspot?.join(",");
   const engineRef = useRef<FlowerEngine | null>(null);
 
   useEffect(() => {
@@ -31,11 +34,12 @@ export function useFlowerField(canvasRef: RefObject<HTMLCanvasElement | null>, o
       wind,
       density,
       seed,
+      pointer: pointerOn && { image, hotspot: hotspotKey ? (hotspotKey.split(",").map(Number) as [number, number]) : undefined, scale },
       settings: settingsKey ? JSON.parse(settingsKey) : undefined,
     };
     if (engineRef.current) engineRef.current.update(next);
     else engineRef.current = new FlowerEngine(canvas, next, events);
-  }, [canvasRef, events, cell, steps, sizesKey, shades, spread, threshold, dot, curve, grid, background, ink, dark, light, scheme, wind, density, seed, settingsKey]);
+  }, [canvasRef, events, cell, steps, sizesKey, shades, spread, threshold, dot, curve, grid, background, ink, dark, light, scheme, wind, density, seed, pointerOn, image, hotspotKey, scale, settingsKey]);
 
   useEffect(
     () => () => {

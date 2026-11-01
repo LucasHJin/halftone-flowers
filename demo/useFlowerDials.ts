@@ -26,6 +26,9 @@ const SWAY_MASS = 10;
 /** Any faster, or damping past 1, and the 60 Hz step can't keep the quickest stems stable. */
 const MAX_SPEED = 5;
 
+/** An 11px crosshair cursor, as a site would give it to CSS `cursor` with hotspot 5 5. */
+const CROSSHAIR = `data:image/svg+xml,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 11 11'><path d='M0 5h11v1H0zM5 0h1v11H5z'/></svg>")}`;
+
 function slider(value: number, min: number, max: number, step: number): [number, number, number, number] {
   return [value, min, max, step];
 }
@@ -113,6 +116,12 @@ const CONFIG = {
   sound: {
     enabled: true,
     volume: slider(0.6, 0, 1, 0.01),
+  },
+  pointer: {
+    mark: { type: "select", options: ["off", "dot", "crosshair"], default: "dot" },
+    dotScale: slider(1, 0.25, 4, 0.05),
+    // At 1 its 1px lines print as a single dot.
+    crosshairScale: slider(3, 1, 8, 0.1),
   },
   shade: {
     _collapsed: true,
@@ -324,6 +333,7 @@ function toOptions(v: Values, seed: number): FlowerFieldOptions {
     wind: wind.bend,
     density: layout.density,
     seed,
+    pointer: v.pointer.mark === "off" ? false : v.pointer.mark === "crosshair" ? { image: CROSSHAIR, hotspot: [5, 5], scale: v.pointer.crosshairScale } : { scale: v.pointer.dotScale },
     settings: {
       layout: {
         flowerSize: { share: layout.flowerSize.share, min: layout.flowerSize.min, max: layout.flowerSize.max },

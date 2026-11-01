@@ -10,6 +10,7 @@ import { Insects } from "./insects/index.js";
 import { Cover } from "./insects/cover.js";
 import { clearOf } from "./insects/insect.js";
 import { Petals } from "./petals.js";
+import { PointerInk } from "./pointerInk.js";
 import { planSpawn, type SpawnPlan } from "./spawn.js";
 import { createStem, curvedStem, poseStem, SEGMENTS } from "./stem.js";
 import type { Head, Ink, Kind, Leaf, LeafShape, Plant, Stem } from "./types.js";
@@ -45,6 +46,8 @@ export class Field {
   insects: Insects;
   /** Loose petals blowing away. */
   petals: Petals;
+  /** The pointer's trail, and its mark when the system cursor is hidden. */
+  pointerInk: PointerInk;
   /** Base flower size, px. */
   bloom = 40;
   /** Diamond width, px. */
@@ -65,6 +68,7 @@ export class Field {
     this.windAt = createWind(settings.wind);
     this.insects = new Insects(this);
     this.petals = new Petals(this);
+    this.pointerInk = new PointerInk(this);
   }
 
   /** `layout`, `species`, `mix`, `tone` and `spawn` wait for the next `layout()`; the rest applies straight away. */
@@ -224,6 +228,7 @@ export class Field {
     }
     this.insects.step(dt);
     this.petals.step(dt);
+    this.pointerInk.step(dt);
   }
 
   /** Wind at (x, y) now, in `WindSettings` units, times `wind`. */

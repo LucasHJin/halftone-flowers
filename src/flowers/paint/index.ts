@@ -23,7 +23,7 @@ import { paintSpike } from "./heads/spike.js";
 import { paintTrumpet } from "./heads/trumpet.js";
 import { aimLight, inLight, inMask, inShade, plantShade, setLight } from "./tone.js";
 
-/** Things that move among the plants (insects, loose petals), painted between them by depth. */
+/** Things that move among the plants (insects, loose petals, the pointer's trail), painted between them by depth. */
 interface Movers {
   /** Sorts them by depth for this frame. */
   beginPaint(): void;
@@ -32,12 +32,12 @@ interface Movers {
   paintNext(ctx: CanvasRenderingContext2D): void;
 }
 
-/** Paints the field's tone image, or with `mask`, the spawn mask in the same shapes, without insects or petals. */
+/** Paints the field's tone image, or with `mask`, the spawn mask in the same shapes, without the movers. */
 export function paintField(ctx: CanvasRenderingContext2D, field: Field, mask = false) {
   const growing = field.growing;
   const plan = field.spawnPlan;
   const { shade } = field.settings;
-  const movers: Movers[] = mask ? [] : [field.insects, field.petals];
+  const movers: Movers[] = mask ? [] : [field.insects, field.petals, field.pointerInk];
   setLight(shade.light);
   for (const m of movers) m.beginPaint();
   for (const plant of field.plants) {

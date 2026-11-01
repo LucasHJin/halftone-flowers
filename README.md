@@ -51,13 +51,33 @@ Fills its parent, so the parent needs a height. All props are optional.
 | `wind` | `number` | `1` | Multiplier on how far the wind bends stems. |
 | `density` | `number` | `1` | Multiplier on the number of stems. |
 | `seed` | `number` | random | The same seed grows the same field. |
+| `pointer` | `boolean \| PointerMark` | `false` | Prints the pointer into the field in place of the system cursor, at the trail's depth, so it passes behind some flowers and in front of others. `true` prints a dot; see [pointer mark](#pointer-mark). Mouse and pen only, over the canvas itself. |
 | `settings` | `FlowerSettingsInput` | | Fine tuning; any part of the [defaults](#defaults). Arrays replace the default whole. |
 | `className` | `string` | | |
 | `style` | `CSSProperties` | | Merged over `display: block; width: 100%; height: 100%`. |
 | `ref` | `Ref<FlowerFieldHandle>` | | See [ref handle](#ref-handle). |
 
 - Prop changes apply live. `settings.spawn` applies only when the field first appears; change its `key` to grow it in again.
-- With `prefers-reduced-motion`, the field is a still image: no insects, petals, trail or click effects, and no events.
+- With `prefers-reduced-motion`, the field is a still image: no insects, petals, trail, pointer mark or click effects, and no events. The system cursor shows.
+
+### Pointer mark
+
+```ts
+interface PointerMark {
+  /** Cursor image as a URL (SVG data URLs work) or a loaded image. Same-origin or served with CORS. Default a dot. */
+  image?: string | HTMLImageElement | HTMLCanvasElement | ImageBitmap;
+  /** Image px that sit on the pointer, like the hotspot in CSS `cursor`. Default the image's middle. */
+  hotspot?: [number, number];
+  /** Multiplier on the mark's size. Default 1. */
+  scale?: number;
+}
+```
+
+Only the image's alpha counts: it prints in the trail's colours, as dots like everything else, so fine lines need scaling up. An 11px crosshair with 1px lines prints as a single dot at `scale: 1` and a plus of dots at `scale: 3`:
+
+```tsx
+<FlowerField pointer={{ image: crosshairSvgUrl, hotspot: [5, 5], scale: 3 }} />
+```
 
 ### Ref handle
 
@@ -101,7 +121,7 @@ Click events fire inside the `pointerdown`, so a listener can start audio.
 
 - `DEFAULT_SETTINGS`, `DEFAULT_COLORS`: the [defaults](#defaults).
 - `schemeColors(colors?, scheme?)`: the colours the field uses for those props, such as its dark-mode background.
-- Types: `FlowerFieldProps`, `FlowerFieldOptions`, `FlowerFieldHandle`, `FieldEvents`, `FieldEvent`, `FieldEventType`, `FieldListener`, `FieldPoint`, `FieldEventHandlers`, `FlowerSettings`, `FlowerSettingsInput`, one type per settings section (`LayoutSettings`, `WindSettings`, ...), `Species`, `Mix`, `Kind`, `InsectKind`, `LeafShape`, `DotShape`, `Grid`, `Scheme`, `HalftoneColors`.
+- Types: `FlowerFieldProps`, `FlowerFieldOptions`, `FlowerFieldHandle`, `FieldEvents`, `FieldEvent`, `FieldEventType`, `FieldListener`, `FieldPoint`, `FieldEventHandlers`, `PointerMark`, `FlowerSettings`, `FlowerSettingsInput`, one type per settings section (`LayoutSettings`, `WindSettings`, ...), `Species`, `Mix`, `Kind`, `InsectKind`, `LeafShape`, `DotShape`, `Grid`, `Scheme`, `HalftoneColors`.
 
 ## Defaults
 

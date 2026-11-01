@@ -21,6 +21,7 @@ export {
   type LeafShape,
   type Mix,
   type PetalSettings,
+  type PointerMark,
   type PointerTrailSettings,
   type Scheme,
   type ShadeSettings,
