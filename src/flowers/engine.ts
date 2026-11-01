@@ -5,9 +5,10 @@ import { FieldEmitter } from "./events.js";
 import { Field } from "./field.js";
 import type { InsectKind } from "./insects/index.js";
 import { paintField } from "./paint/index.js";
+import { inMask, printTone } from "./paint/tone.js";
 import { Mark, type PointerMark } from "./pointerMark.js";
 import { resolveSettings, type FlowerSettings, type FlowerSettingsInput } from "./settings.js";
-import { spawnScale } from "./spawn.js";
+import { PRINT_SPAWN, spawnScale } from "./spawn.js";
 
 const STEP = 1 / 60;
 const MAX_STEPS = 4;
@@ -36,6 +37,24 @@ const DARK_PAGE = 0.2;
  * The eye separates dark colours less well than light ones, so an even turnover sinks them into the page.
  */
 const DARK_LIFT = 1.2;
+
+/** What `print` gets each frame. */
+export interface PrintFrame {
+  /** Field width in CSS px. */
+  width: number;
+  /** Field height in CSS px. */
+  height: number;
+  /** Diamond width in CSS px. Lines much thinner than this break up into separate dots. */
+  cell: number;
+  /**
+   * The only fill or stroke style that prints; other colours come out as stray ink. `amount` is dot size from 0 none to 1 biggest,
+   * default 1. `place` is the spot on the colour ramp from 0 `light` through 0.5 `ink` to 1 `dark`, default 0.5.
+   */
+  tone(amount?: number, place?: number): string;
+}
+
+/** Draws on the field's scene, in CSS px from its top left. Runs each frame, twice while the field grows in. */
+export type PrintScene = (ctx: CanvasRenderingContext2D, frame: PrintFrame) => void;
 
 export interface FlowerFieldOptions {
   /** Diamond width in CSS px. Default scales with the field's width from 5 to 10, at least 6 on a phone. */
@@ -72,6 +91,8 @@ export interface FlowerFieldOptions {
    * and not with reduced motion. `true` prints a dot; a `PointerMark` can print your own cursor. Default off.
    */
   pointer?: boolean | PointerMark;
+  /** Draws your own marks behind the plants, so they print as dots in the field's colours and grow in with it. Keep the function stable: a new one each render reapplies every option. */
+  print?: PrintScene;
   /** Fine tuning; see `DEFAULT_SETTINGS`. Anything left out keeps its default. */
   settings?: FlowerSettingsInput;
 }
@@ -224,11 +245,24 @@ export class FlowerEngine {
   private draw() {
     const { field, halftone } = this;
     const scene = halftone.beginScene();
+    this.paintPrint(scene);
     paintField(scene, field);
     const growing = field.growing;
     if (growing === null) return halftone.present();
-    paintField(halftone.beginReveal(), field, true);
+    const reveal = halftone.beginReveal();
+    inMask(PRINT_SPAWN, () => this.paintPrint(reveal));
+    paintField(reveal, field, true);
     halftone.present(spawnScale(field.spawnPlan!, growing, field.height));
+  }
+
+  /** Saves `ctx` around the `print` option, since `paintField` needs its transform intact. */
+  private paintPrint(ctx: CanvasRenderingContext2D) {
+    const { print } = this.options;
+    if (!print) return;
+    const { width, height, cell } = this.field;
+    ctx.save();
+    print(ctx, { width, height, cell, tone: printTone });
+    ctx.restore();
   }
 
   private resize(relayout = false) {

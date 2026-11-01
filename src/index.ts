@@ -23,6 +23,8 @@ export {
   type PetalSettings,
   type PointerMark,
   type PointerTrailSettings,
+  type PrintFrame,
+  type PrintScene,
   type Scheme,
   type ShadeSettings,
   type SpawnSettings,

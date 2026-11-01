@@ -23,6 +23,9 @@ export function tone(ink: Ink, amount: number, by = 0) {
   return `rgb(${Math.round(v)},${Math.round(v * clamp(at + by, 0, 1))},${accent ? Math.round(v) : 0})`;
 }
 
+/** `tone` for the `print` option, with `place` measured on the ramp itself: 0 light, 0.5 ink, 1 dark. */
+export const printTone = (amount = 1, place = RAMP[0]) => tone(0, amount, place - RAMP[0]);
+
 /** Runs `paint` with every ink printing in the halftone's accent ramp. */
 export function inAccent(paint: () => void) {
   accent = true;

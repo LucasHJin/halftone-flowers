@@ -52,6 +52,7 @@ Fills its parent, so the parent needs a height. All props are optional.
 | `density` | `number` | `1` | Multiplier on the number of stems. |
 | `seed` | `number` | random | The same seed grows the same field. |
 | `pointer` | `boolean \| PointerMark` | `false` | Prints the pointer into the field in place of the system cursor, at the trail's depth, so it passes behind some flowers and in front of others. `true` prints a dot; see [pointer mark](#pointer-mark). Mouse and pen only, over the canvas itself. |
+| `print` | `PrintScene` | | Draws your own marks behind the flowers, so they print as dots in the field's colours and grow in with it; see [printing](#printing). |
 | `settings` | `FlowerSettingsInput` | | Fine tuning; any part of the [defaults](#defaults). Arrays replace the default whole. |
 | `className` | `string` | | |
 | `style` | `CSSProperties` | | Merged over `display: block; width: 100%; height: 100%`. |
@@ -78,6 +79,25 @@ Only the image's alpha counts: it prints in the trail's colours, as dots like ev
 ```tsx
 <FlowerField pointer={{ image: crosshairSvgUrl, hotspot: [5, 5], scale: 3 }} />
 ```
+
+### Printing
+
+`print` draws on the hidden canvas the field prints from, behind the flowers, in CSS px from the field's top left.
+
+```tsx
+const sign: PrintScene = (ctx, { width, tone }) => {
+  ctx.font = "700 96px sans-serif";
+  ctx.textAlign = "right";
+  ctx.fillStyle = tone();
+  ctx.fillText("Hello", width - 48, 120);
+};
+
+<FlowerField print={sign} />
+```
+
+Fill and stroke with `tone(amount, place)`; other colours come out as stray ink. `amount` is dot size, from 0 to 1, default 1. `place` is the spot on the colour ramp: 0 `light`, 0.5 `ink` (default), 1 `dark`. Lines thinner than a dot break up, so keep text large and bold.
+
+It runs each frame, twice while the field grows in. Define it outside the component or in `useCallback`, since a new function each render reapplies every option.
 
 ### Ref handle
 
@@ -121,7 +141,7 @@ Click events fire inside the `pointerdown`, so a listener can start audio.
 
 - `DEFAULT_SETTINGS`, `DEFAULT_COLORS`: the [defaults](#defaults).
 - `schemeColors(colors?, scheme?)`: the colours the field uses for those props, such as its dark-mode background.
-- Types: `FlowerFieldProps`, `FlowerFieldOptions`, `FlowerFieldHandle`, `FieldEvents`, `FieldEvent`, `FieldEventType`, `FieldListener`, `FieldPoint`, `FieldEventHandlers`, `PointerMark`, `FlowerSettings`, `FlowerSettingsInput`, one type per settings section (`LayoutSettings`, `WindSettings`, ...), `Species`, `Mix`, `Kind`, `InsectKind`, `LeafShape`, `DotShape`, `Grid`, `Scheme`, `HalftoneColors`.
+- Types: `FlowerFieldProps`, `FlowerFieldOptions`, `FlowerFieldHandle`, `FieldEvents`, `FieldEvent`, `FieldEventType`, `FieldListener`, `FieldPoint`, `FieldEventHandlers`, `PointerMark`, `PrintScene`, `PrintFrame`, `FlowerSettings`, `FlowerSettingsInput`, one type per settings section (`LayoutSettings`, `WindSettings`, ...), `Species`, `Mix`, `Kind`, `InsectKind`, `LeafShape`, `DotShape`, `Grid`, `Scheme`, `HalftoneColors`.
 
 ## Defaults
 

@@ -73,6 +73,9 @@ export function spawnFront(plant: Plant, elapsed: number, height: number) {
   return s ? height - (elapsed - s.bottom) / s.pace : -Infinity;
 }
 
+/** Spawn mask colour for the `print` option: its front crosses the bottom of the screen at 0s and climbs at the fastest pace. */
+export const PRINT_SPAWN = "rgb(0,0,255)";
+
 /** A plant's flat colour in the spawn mask. */
 export function spawnColor(plant: Plant, plan: SpawnPlan) {
   const s = plant.spawn!;
