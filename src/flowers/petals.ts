@@ -150,7 +150,11 @@ function sharesFrom(paint: LoosePaint, length: number, x: number, y: number): nu
       if (data[(j * size + i) * 4 + 3] >= 128) all.push(Math.hypot(i + 0.5 - size / 2 - x, j + 0.5 - size / 2 - y));
     }
   }
-  if (!all.length) return [0, Math.hypot(x, y) + length / 2];
+  if (!all.length) {
+    // Nothing painted at this size: equal-area steps of a disc reaching the far end.
+    const reach = Math.hypot(x, y) + length / 2;
+    return Array.from({ length: SHARES + 1 }, (_, k) => reach * Math.sqrt(k / SHARES));
+  }
   all.sort((a, b) => a - b);
   return Array.from({ length: SHARES + 1 }, (_, k) => all[Math.min(all.length - 1, Math.round((k / SHARES) * (all.length - 1)))]);
 }
