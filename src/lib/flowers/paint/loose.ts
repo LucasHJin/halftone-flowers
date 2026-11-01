@@ -3,11 +3,15 @@
  * still on its kind of head and taken from that flower's own: its inks and
  * blush, how long that petal was, how many it had, and whatever marks it
  * carries (a poppy's blotch, the beard on an iris fall, a foxglove's dark
- * mouth). Spikes, clusters and plumes shed whole florets or wisps instead.
+ * mouth). Spikes, clusters
+ * and plumes shed whole florets or pairs of hairs instead.
  *
  * Each is drawn about its middle, its base toward -x and its tip toward +x.
  * Seen alone and small, a loose petal is drawn a little bigger than on its
- * flower, and never so small that its shape is lost among the dots.
+ * flower, and never so small that its shape is lost among the dots. A spike's
+ * florets and a plume's hairs are fine parts of a long, thin flower, so they
+ * come off as they were on it, only a little bigger, their sides lit as they
+ * were there.
  *
  * Petals are told apart by the index each is drawn at on its head, which is
  * what a head's `lost` holds once they're shaken off.
@@ -19,8 +23,9 @@ import { florets } from "./heads/cluster";
 import { cupSectors, cupShape } from "./heads/cup";
 import { RINGS } from "./heads/globe";
 import { headFrame, point } from "./heads/petals";
-import { HAIR_STEPS } from "./heads/plume";
-import { along, blob, lightStrength, tone } from "./tone";
+import { hairPair, HAIR_STEPS, SWEEP } from "./heads/plume";
+import { BELL_HANG, BELL_TURN, bellSide, spikeFloret } from "./heads/spike";
+import { along, blob, lightStrength, litBy, tone } from "./tone";
 
 /** Paints a loose petal moved `by` along the ramp, for which side of it faces you. */
 export type LoosePaint = (ctx: CanvasRenderingContext2D, by: number) => void;
@@ -33,7 +38,7 @@ export interface LooseLook {
   scale: number;
 }
 
-/** Turns a petal `length` by `width` px on its flower into the size it's drawn loose, at least `least` dots long and `wide` across. */
+/** Turns a petal `length` by `width` px on its flower into the size it's drawn loose, at least `least` dots long and `wide` across; 0 for just a little bigger. */
 type Fit = (length: number, width: number, least?: number, wide?: number) => [number, number];
 
 /** How much bigger than on its flower a loose petal is drawn, at least; small ones are drawn bigger still to reach their fewest dots long. */
@@ -44,6 +49,9 @@ const MOST_GROWN = 1.8;
 
 /** Fewest dots across a loose petal, so its outline still shows, unless that would make it as wide as it's long. */
 const MIN_WIDE = 1.8;
+
+/** How many of a plume's hairs lie over each other along it. */
+const OVERLAP = 3;
 
 /** Petal `k` of the head on `s` as it looks loose, `size` times as big as it would otherwise be. */
 export function looseLook(s: Stem, h: Head, k: number, cell: number, size: number): LooseLook {
@@ -213,72 +221,63 @@ function shapeOf(s: Stem, h: Head, k: number, cell: number, fit: Fit): Omit<Loos
       };
     }
     case "spike": {
-      // Smaller toward the top of the spike.
-      const floret = R * lerp(1, 0.4, k / (h.petals - 1)) * jitter;
+      // Drawn as paintSpike draws it, x along the stem's right and -y up it, each side lit as the side of the stem it was on.
+      const floret = spikeFloret(h, k);
       if (h.style === 1) {
-        // A foxglove bell, flared at the end, with its dark mouth.
-        const [L] = fit(floret * 2.4, floret * 1.4, 5);
-        const u = L / 2.4;
+        // A foxglove bell, along x from where it hung to its dark mouth, lit as the side of the stem it hung on.
+        const [L] = fit(floret.size * 2.1, floret.size * 1.1, 0);
+        const u = L / 2.1;
+        const side = bellSide(k);
+        const out: [number, number] = [-Math.sin(BELL_TURN), -side * Math.cos(BELL_TURN)];
         return {
           length: L,
           paint: (ctx, by) => {
-            ctx.fillStyle = tone(h.ink, amount, by);
-            blob(ctx, -0.15 * u, 0, 1.05 * u, 0.62 * u, 0);
-            ctx.fillStyle = tone(h.ink, amount * 0.9, by - 0.05);
-            blob(ctx, 0.8 * u, 0, 0.32 * u, 0.75 * u, 0);
-            ctx.fillStyle = tone(h.ink === 1 ? 0 : 1, 0.85, by);
-            blob(ctx, 0.88 * u, 0, 0.2 * u, 0.5 * u, 0);
+            ctx.fillStyle = tone(h.ink, floret.amount, by + litBy(...out));
+            blob(ctx, 0, 0, 1.05 * u, 0.55 * u, 0);
+            ctx.fillStyle = tone(h.ink === 1 ? 0 : 1, 0.7, by);
+            blob(ctx, 0.65 * u, 0, 0.2 * u, 0.3 * u, 0);
           },
         };
       }
       if (h.style === 2) {
-        // A pair of lavender florets off one whorl.
-        const [L] = fit(floret * 2, floret, 4);
-        const u = L / 2;
+        // A whorl of lavender: a floret either side of the stem.
+        const [L] = fit(floret.size * 2.1, floret.size * 0.9, 0);
+        const u = L / 2.1;
         return {
           length: L,
           paint: (ctx, by) => {
-            for (const flank of [-1, 1]) {
-              ctx.fillStyle = tone(h.ink, amount, by + flank * 0.06);
-              blob(ctx, flank * 0.45 * u, 0, 0.55 * u, 0.45 * u, flank * -0.6);
+            for (const side of [-1, 1]) {
+              ctx.fillStyle = tone(h.ink, floret.amount, by + litBy(side, 0));
+              blob(ctx, side * 0.5 * u, 0, 0.55 * u, 0.45 * u, side * 0.6);
             }
           },
         };
       }
-      // A lupine's pea flower: two wings, and the banner standing over them.
-      const [L] = fit(floret * 2.3, floret * 1.5, 4.5);
-      const u = L / 2.3;
+      // A lupine's pea flower: two wings, and the banner standing over them. On the spike they spread wide, stacking into its cone; alone, they close up round the banner, or the floret reads as a bar.
+      const [L] = fit(floret.size * 2.1, floret.size * 1.5, 0);
+      const u = L / 2.1;
       return {
         length: L,
         paint: (ctx, by) => {
-          for (const flank of [-1, 1]) {
-            ctx.fillStyle = tone(h.ink, amount, by + flank * 0.08);
-            blob(ctx, flank * 0.75 * u, 0.25 * u, 0.8 * u, 0.6 * u, flank * 0.5);
+          for (const side of [-1, 1]) {
+            ctx.fillStyle = tone(h.ink, floret.amount, by + litBy(side, 0));
+            blob(ctx, side * 0.45 * u, 0.15 * u, 0.6 * u, 0.55 * u, side * 0.5);
           }
-          ctx.fillStyle = tone(h.ink, amount, by);
-          blob(ctx, 0, -0.35 * u, 0.6 * u, 0.5 * u, 0);
+          ctx.fillStyle = tone(h.ink, floret.amount, by);
+          blob(ctx, 0, -0.3 * u, 0.55 * u, 0.5 * u, 0);
         },
       };
     }
     case "plume": {
-      // A wisp of the plume's hairs fanning out from the seed they grew from, thick enough to print as more than a scatter of dots.
-      const [L] = fit(R * 0.9 * jitter, R * 0.6, 5);
+      // A pair of its hairs, splayed from where they grew as they were on the plume and as pale. On the plume, hairs overlap a few deep, which is what prints; alone, they're drawn that much thicker, so they carry as much ink, and stay that fine however long.
+      const pair = hairPair(h, k);
+      const [L] = fit(pair.length, pair.length * Math.sin(pair.spread) * 2, 0);
       const hairs = new Path2D();
-      for (let i = 0; i < 5; i++) {
-        const a = lerp(-0.6, 0.6, i / 4) + (rand() - 0.5) * 0.15;
-        const length = L * lerp(0.7, 1, rand());
+      for (const side of [-1, 1]) {
         hairs.moveTo(-L / 2, 0);
-        hairs.quadraticCurveTo(-L / 2 + Math.cos(a * 0.5) * length * 0.5, Math.sin(a * 0.5) * length * 0.5, -L / 2 + Math.cos(a) * length, Math.sin(a) * length);
+        hairs.lineTo(-L / 2 + Math.cos(pair.spread) * L, side * Math.sin(pair.spread) * L);
       }
-      const width = Math.max(cell * 0.8, R * 0.09);
-      return {
-        length: L,
-        paint: (ctx, by) => {
-          stroke(ctx, hairs, tone(h.ink, amount, by), width);
-          ctx.fillStyle = tone(h.ink, Math.min(1, amount * 1.3), by + 0.2);
-          blob(ctx, -L / 2, 0, cell * 0.7, cell * 0.5, 0);
-        },
-      };
+      return { length: L, paint: (ctx, by) => stroke(ctx, hairs, tone(h.ink, pair.amount, by), OVERLAP * pair.width) };
     }
   }
 }
@@ -306,19 +305,31 @@ export function petalIndices(s: Stem, h: Head): number[] {
 }
 
 /**
- * Where petal `k` of the head on `s` is on screen as it's posed at time `t`,
- * and which way it points out from the middle of the head, radians clockwise
- * from rightward. Near enough to where its head draws it for one to take over
- * from the other.
+ * Where the middle of petal `k` of the head on `s` is on screen as it's posed
+ * at time `t`, which way its own x runs as looseLook draws it (`a`), and which
+ * way it points out from the head (`out`), radians clockwise from rightward.
+ * Near enough to where its head draws it for one to take over from the other.
  */
 export function petalAt(s: Stem, h: Head, k: number, t: number) {
   const R = h.radius;
-  if (h.kind === "spike" || h.kind === "plume") {
-    const start = 1 - h.reach;
-    const p = along(s, h.kind === "spike" ? start + (1 - start) * (k / (h.petals - 1)) * 0.96 : start + ((1 - start) * k) / HAIR_STEPS);
-    // Off to one side of the stem; (cos a, sin a) is the stem's right.
-    const a = p.a + (k % 2 ? 0 : Math.PI);
-    return { x: p.x + Math.cos(a) * R * 0.6, y: p.y + Math.sin(a) * R * 0.6, a };
+  if (h.kind === "spike") {
+    // Where paintSpike draws it: nudged off the stem toward the stem's right, (cos p.a, sin p.a), by its drift, a bell hanging out from there.
+    const floret = spikeFloret(h, k);
+    const p = along(s, floret.along);
+    const x = p.x + Math.cos(p.a) * h.drift[k] * floret.size;
+    const y = p.y + Math.sin(p.a) * h.drift[k] * floret.size;
+    if (h.style !== 1) return { x, y, a: p.a, out: p.a + (h.drift[k] >= 0 ? 0 : Math.PI) };
+    const side = bellSide(k);
+    const b = p.a + side * BELL_TURN;
+    const hang = BELL_HANG * floret.size;
+    return { x: x - Math.sin(b) * hang, y: y + Math.cos(b) * hang, a: b + Math.PI / 2, out: p.a + (side > 0 ? 0 : Math.PI) };
+  }
+  if (h.kind === "plume") {
+    // Halfway along the pair of hairs, which reach up the stem, swept back. Every other pair is on the stem's left.
+    const pair = hairPair(h, k);
+    const p = along(s, pair.along);
+    const up = p.a + SWEEP - Math.PI / 2;
+    return { x: p.x + (Math.cos(up) * pair.length) / 2, y: p.y + (Math.sin(up) * pair.length) / 2, a: up, out: p.a + (k % 2 ? 0 : Math.PI) };
   }
   // Where it is in the head's own frame at the top of the stem, and the middle it points out from.
   let x = 0;
@@ -393,7 +404,8 @@ export function petalAt(s: Stem, h: Head, k: number, t: number) {
   const turn = s.angle[SEGMENTS - 1] + s.nod;
   const cos = Math.cos(turn);
   const sin = Math.sin(turn);
-  return { x: s.x[SEGMENTS] + x * cos - y * sin, y: s.y[SEGMENTS] + x * sin + y * cos, a: turn + Math.atan2(y - cy, x - cx) };
+  const a = turn + Math.atan2(y - cy, x - cx);
+  return { x: s.x[SEGMENTS] + x * cos - y * sin, y: s.y[SEGMENTS] + x * sin + y * cos, a, out: a };
 }
 
 /** The ring of a peony's petal `k` is in (see paintGlobe), with which ring it is and where in it the petal comes. */

@@ -2,18 +2,35 @@ import { lerp } from "../../../../utils/math";
 import type { Head, Stem } from "../../types";
 import { along, blob, litBy, tone } from "../tone";
 
+/** How far a foxglove's bells turn out from the stem, radians, and how far the middle of one hangs from where it grows, in floret sizes. */
+export const BELL_TURN = 1.2;
+export const BELL_HANG = 0.9;
+
+/**
+ * Floret `i` of a spike: how far up the spike it is, from 0 at the foot to 1
+ * at the tip, where that is along the stem, its size, and how much ink it
+ * takes. Open florets low down, smaller, tighter and deeper-coloured buds
+ * toward the tip.
+ */
+export function spikeFloret(h: Head, i: number) {
+  const k = i / (h.petals - 1);
+  return { k, along: 1 - h.reach + h.reach * k * 0.96, size: h.radius * lerp(1, 0.4, k) * h.jitter[i], amount: h.tone * lerp(0.82, 1, k) };
+}
+
+/** Which side of the stem foxglove bell `i` hangs on: 1 its right, -1 its left. Mostly the one side. */
+export function bellSide(i: number) {
+  return i % 3 === 2 ? -1 : 1;
+}
+
 /** Flowers all the way up the top of the stem: lupine cones, foxglove bells, lavender whorls. */
 export function paintSpike(ctx: CanvasRenderingContext2D, s: Stem, h: Head) {
   const n = h.petals;
-  const start = 1 - h.reach;
   for (let i = 0; i < n; i++) {
     // Lavender leaves gaps between its whorls.
     if ((h.style === 2 && i % 2 === 1 && i < n - 3) || h.lost.has(i)) continue;
-    const k = i / (n - 1);
-    const p = along(s, start + (1 - start) * k * 0.96);
-    const size = h.radius * lerp(1, 0.4, k) * h.jitter[i];
-    // Open florets low down, tighter and deeper-coloured buds toward the tip.
-    const amount = h.tone * lerp(0.82, 1, k);
+    const f = spikeFloret(h, i);
+    const { size, amount } = f;
+    const p = along(s, f.along);
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(p.a);
@@ -30,12 +47,12 @@ export function paintSpike(ctx: CanvasRenderingContext2D, s: Stem, h: Head) {
       blob(ctx, 0, -size * 0.3, size * 0.6, size * 0.5, 0);
     } else if (h.style === 1) {
       // Bells hang mostly on one side, opening downward, with a darker mouth.
-      const side = i % 3 === 2 ? -1 : 1;
+      const side = bellSide(i);
       ctx.fillStyle = lit(side);
-      ctx.rotate(side * 1.2);
-      blob(ctx, 0, size * 0.9, size * 0.55, size * 1.05, 0);
+      ctx.rotate(side * BELL_TURN);
+      blob(ctx, 0, size * BELL_HANG, size * 0.55, size * 1.05, 0);
       ctx.fillStyle = tone(h.ink === 1 ? 0 : 1, 0.7);
-      blob(ctx, 0, size * 1.55, size * 0.3, size * 0.2, 0);
+      blob(ctx, 0, size * (BELL_HANG + 0.65), size * 0.3, size * 0.2, 0);
     } else {
       for (const side of [-1, 1]) {
         ctx.fillStyle = lit(side);

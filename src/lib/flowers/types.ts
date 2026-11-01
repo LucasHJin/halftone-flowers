@@ -47,6 +47,8 @@ export interface Head {
   style: number;
   /** The petals, florets or plume hairs shaken off it, by the index each is drawn at. */
   lost: Set<number>;
+  /** Those of them still coming off, by the same index: how much each still shows on it, fading from 1 to 0. */
+  leaving: Map<number, number>;
 }
 
 export interface Leaf {

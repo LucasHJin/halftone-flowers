@@ -443,6 +443,7 @@ export class Garden {
       reach: kind === "plume" ? this.between(0.22, 0.35) : this.between(0.3, 0.5),
       style,
       lost: new Set(),
+      leaving: new Map(),
     };
   }
 
