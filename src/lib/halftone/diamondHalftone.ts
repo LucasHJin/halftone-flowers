@@ -18,15 +18,20 @@
  * A second hidden canvas, the reveal, can be laid out the same way to scale
  * each dot, for animating dots in. What its colours mean is up to the caller.
  *
- * Ink can spread: an SVG filter on the canvas blurs the dots, then cuts their
- * edges back sharp, so dots close together run into each other like wet ink.
+ * Ink can spread: the dots are blurred, then their edges cut back sharp, so
+ * dots close together run into each other like wet ink.
+ *
+ * Where WebGL2 runs on the GPU, the dots are printed there (see GlPrinter),
+ * and the tone image goes straight up to it. Elsewhere they're worked out on
+ * the CPU and filled on a 2D canvas, with an SVG filter for the spread.
  */
 import { ramp } from "../../utils/color";
 import { clamp, TAU } from "../../utils/math";
+import { BAYER4 } from "./bayer";
+import { GlPrinter } from "./glPrinter";
 
 /** Samples per diamond along each lattice axis. */
 const SS = 2;
-const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 /** Radius of a circle with the area of a diamond of half-diagonal 1, so each size prints the same tone whatever the shape. */
 const ROUND = Math.sqrt(2 / Math.PI);
 /** Half the side of a square with the area of a diamond of half-diagonal 1. */
@@ -92,7 +97,9 @@ export class DiamondHalftone {
   /** Where the dots sit, with as many to an area either way. Takes effect on the next resize. */
   grid: Grid = "diagonal";
 
-  private ctx: CanvasRenderingContext2D;
+  /** The GPU printer, or else the visible canvas's 2D context, for printing on the CPU. */
+  private printer: GlPrinter | null;
+  private ctx: CanvasRenderingContext2D | null = null;
   private scene = document.createElement("canvas");
   private sctx: CanvasRenderingContext2D;
   private reveal: HTMLCanvasElement | null = null;
@@ -106,16 +113,23 @@ export class DiamondHalftone {
   private nv = 0;
   private palettes = new Map<string, string[]>();
   private filter: InkFilter | null = null;
+  private scales: Float32Array | null = null;
 
   constructor(private canvas: HTMLCanvasElement, public colors: HalftoneColors) {
-    const ctx = canvas.getContext("2d");
-    const sctx = this.scene.getContext("2d", { willReadFrequently: true });
-    if (!ctx || !sctx) throw new Error("2D canvas unavailable");
-    this.ctx = ctx;
+    // Once it can print again after losing the GPU, the scene from the last frame is still there to print.
+    this.printer = GlPrinter.create(canvas, () => this.present());
+    if (!this.printer) {
+      this.ctx = canvas.getContext("2d");
+      if (!this.ctx) throw new Error("2D canvas unavailable");
+    }
+    // Read back on the CPU only for the CPU printer; for the GPU one it stays on the GPU.
+    const sctx = this.scene.getContext("2d", { willReadFrequently: !this.printer });
+    if (!sctx) throw new Error("2D canvas unavailable");
     this.sctx = sctx;
   }
 
   resize(width: number, height: number, dpr: number) {
+    if (this.printer) dpr = Math.min(dpr, this.printer.maxSize / width, this.printer.maxSize / height);
     this.width = width;
     this.height = height;
     this.dpr = dpr;
@@ -147,11 +161,10 @@ export class DiamondHalftone {
    * the background. With no spread it passes them through uncut.
    */
   applyInk() {
-    const blur = Math.max(0, this.spread * this.cell * SPREAD[this.dot]);
+    // The GPU printer spreads the ink itself, as it prints.
+    if (this.printer) return;
+    const { blur, sharp, cut } = this.ink();
     const f = (this.filter ??= createInkFilter());
-    // Steep enough that the cut edge is about one device px wide, so it stays smooth without blurring.
-    const sharp = blur > 0 ? Math.max(1, 2.5 * blur * this.dpr) : 1;
-    const cut = blur > 0 ? -sharp * this.threshold : 0;
     f.blur.setAttribute("stdDeviation", String(blur));
     f.cut.setAttribute("values", `1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 ${sharp} ${cut}`);
     f.paper.setAttribute("flood-color", this.colors.background);
@@ -160,8 +173,18 @@ export class DiamondHalftone {
   }
 
   destroy() {
+    this.printer?.destroy();
     this.filter?.svg.remove();
     this.filter = null;
+  }
+
+  /** How far the ink spreads, in CSS px, and the slope and offset of the cut on its alpha. */
+  private ink() {
+    const blur = Math.max(0, this.spread * this.cell * SPREAD[this.dot]);
+    // Steep enough that the cut edge is about one device px wide, so it stays smooth without blurring.
+    const sharp = blur > 0 ? Math.max(1, 2.5 * blur * this.dpr) : 1;
+    const cut = blur > 0 ? -sharp * this.threshold : 0;
+    return { blur, sharp, cut };
   }
 
   /** Clears the hidden canvas and returns it, set up so you draw in CSS px. */
@@ -206,7 +229,71 @@ export class DiamondHalftone {
 
   /** Halftones whatever was drawn since beginScene onto the visible canvas, each dot scaled by `scale` if given. */
   present(scale?: DotScale) {
-    const { ctx, cell, sizes, nu, nv, iu0, iv0 } = this;
+    if (this.printer) this.printOnGpu(this.printer, scale);
+    else this.printOnCanvas(this.ctx!, scale);
+  }
+
+  private printOnGpu(printer: GlPrinter, scale?: DotScale) {
+    const { blur, sharp, cut } = this.ink();
+    printer.print({
+      scene: this.scene,
+      samples: SS,
+      scale: scale && this.rctx ? this.scaleEach(scale) : null,
+      origin: [this.iu0, this.iv0],
+      count: [this.nu, this.nv],
+      cell: this.cell,
+      straight: this.grid === "straight",
+      dpr: this.dpr,
+      sizes: this.sizes,
+      shape: SHAPES.indexOf(this.dot),
+      reach: reach(this.dot, clamp(this.curve, 0, 1)),
+      curve: clamp(this.curve, 0, 1),
+      palette: this.shadesOf(this.colors),
+      accent: this.shadesOf(this.accent ?? this.colors),
+      background: this.colors.background,
+      blur: blur * this.dpr,
+      sharp,
+      cut,
+    });
+  }
+
+  /** `scale` for every diamond, row by row, from the reveal canvas's average colour over it. */
+  private scaleEach(scale: DotScale) {
+    const { nu, nv, iu0, iv0 } = this;
+    const mask = this.rctx!.getImageData(0, 0, this.scene.width, this.scene.height).data;
+    if (this.scales?.length !== nu * nv) this.scales = new Float32Array(nu * nv);
+    const out = this.scales;
+    const stride = this.scene.width * 4;
+    const n = SS * SS;
+    for (let cj = 0; cj < nv; cj++) {
+      const j = iv0 + cj;
+      for (let ci = 0; ci < nu; ci++) {
+        let mr = 0;
+        let mg = 0;
+        let mb = 0;
+        for (let sy = 0; sy < SS; sy++) {
+          let p = (cj * SS + sy) * stride + ci * SS * 4;
+          for (let sx = 0; sx < SS; sx++, p += 4) {
+            mr += mask[p];
+            mg += mask[p + 1];
+            mb += mask[p + 2];
+          }
+        }
+        const [x, y] = this.centre(iu0 + ci, j);
+        out[cj * nu + ci] = scale(mr / n, mg / n, mb / n, x, y, iu0 + ci, j);
+      }
+    }
+    return out;
+  }
+
+  /** Where diamond (i, j)'s dot is centred on screen. */
+  private centre(i: number, j: number): [number, number] {
+    if (this.grid === "straight") return [i * this.pitch, j * this.pitch];
+    return [((i - j) * this.cell) / 2, ((i + j) * this.cell) / 2];
+  }
+
+  private printOnCanvas(ctx: CanvasRenderingContext2D, scale?: DotScale) {
+    const { cell, sizes, nu, nv, iu0, iv0 } = this;
     const data = this.sctx.getImageData(0, 0, this.scene.width, this.scene.height).data;
     const mask = scale && this.rctx ? this.rctx.getImageData(0, 0, this.scene.width, this.scene.height).data : null;
     const stride = this.scene.width * 4;
@@ -219,11 +306,8 @@ export class DiamondHalftone {
     const accentPaths = accent.map(() => new Path2D());
     const last = paths.length - 1;
     const dot = this.dot;
-    const straight = this.grid === "straight";
-    const pitch = this.pitch;
     const curve = clamp(this.curve, 0, 1);
-    // Each curved side cuts 2/3 of the triangle under its control point from a plain diamond; the tips reach further to make up for it.
-    const tip = 1 / Math.sqrt(1 - (2 * curve) / 3);
+    const k = reach(dot, curve);
 
     for (let cj = 0; cj < nv; cj++) {
       const j = iv0 + cj;
@@ -241,8 +325,7 @@ export class DiamondHalftone {
         }
         if (ink === 0) continue;
         const i = iu0 + ci;
-        const x = straight ? i * pitch : (i - j) * half;
-        const y = straight ? j * pitch : (i + j) * half;
+        const [x, y] = this.centre(i, j);
         if (x < -cell || y < -cell || x > this.width + cell || y > this.height + cell) continue;
 
         // Where shapes meet, the cell is as covered as all of them together, in their average shade.
@@ -270,15 +353,13 @@ export class DiamondHalftone {
         // Thresholds two cells over from the size's, so the dots that round up in size aren't the first to change ramp.
         const accented = marked > (ink * (BAYER4[((i + 2) & 3) | (((j + 2) & 3) << 2)] + 0.5)) / 16;
         const path = (accented ? accentPaths : paths)[Math.round(Math.min(1, shade / ink) * last)];
+        r *= k;
         if (dot === "round") {
-          r *= ROUND;
           path.moveTo(x + r, y);
           path.arc(x, y, r, 0, TAU);
         } else if (dot === "square") {
-          r *= SQUARE;
           path.rect(x - r, y - r, r * 2, r * 2);
         } else {
-          r *= tip;
           const c = (r * (1 - curve)) / 2;
           path.moveTo(x + r, y);
           path.quadraticCurveTo(x + c, y + c, x, y + r);
@@ -314,6 +395,16 @@ export class DiamondHalftone {
     }
     return shades;
   }
+}
+
+const SHAPES: DotShape[] = ["round", "square", "diamond"];
+
+/** How far a dot of shape `dot` reaches from its centre, as a share of the half-diagonal of a diamond with the same area. */
+function reach(dot: DotShape, curve: number) {
+  if (dot === "round") return ROUND;
+  if (dot === "square") return SQUARE;
+  // Each curved side cuts 2/3 of the triangle under its control point from a plain diamond; the tips reach further to make up for it.
+  return 1 / Math.sqrt(1 - (2 * curve) / 3);
 }
 
 interface InkFilter {

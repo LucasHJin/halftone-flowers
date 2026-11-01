@@ -3,7 +3,7 @@ type Lab = [number, number, number];
 let probe: CanvasRenderingContext2D | null = null;
 
 /** Any CSS colour as sRGB channels from 0 to 1, read back through a canvas so names and rgb() work too. */
-function parse(colour: string): [number, number, number] {
+export function rgbOf(colour: string): [number, number, number] {
   probe ??= document.createElement("canvas").getContext("2d");
   if (!probe) return [0, 0, 0];
   probe.fillStyle = "#000";
@@ -20,7 +20,7 @@ const toGamma = (c: number) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2
 
 /** OKLab, from https://bottosson.github.io/posts/oklab/ */
 function toLab(colour: string): Lab {
-  const [r, g, b] = parse(colour).map(toLinear);
+  const [r, g, b] = rgbOf(colour).map(toLinear);
   const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
   const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
   const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);

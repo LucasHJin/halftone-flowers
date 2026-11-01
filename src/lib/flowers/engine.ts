@@ -80,6 +80,8 @@ export class FlowerEngine {
   private raf = 0;
   private last = 0;
   private acc = 0;
+  /** Whether the canvas needs drawing before the bed next moves, having been cleared by a resize. */
+  private stale = true;
   private visible = true;
   private disposed = false;
   private laidOut = "";
@@ -191,6 +193,7 @@ export class FlowerEngine {
     const cell = this.options.cell ?? Math.round(clamp(rect.width / 170, 5, 10));
     this.halftone.cell = cell;
     this.halftone.resize(rect.width, rect.height, dpr);
+    this.stale = true;
     const key = `${rect.width}x${rect.height}`;
     if (relayout || key !== this.laidOut) {
       // Only the first layout grows in; after a resize the bed is just there.
@@ -221,7 +224,11 @@ export class FlowerEngine {
       steps++;
     }
     if (steps === MAX_STEPS) this.acc = 0;
-    this.draw();
+    // The bed only moves on a step, so on a screen that refreshes more often than that, the frames between would draw the same picture again.
+    if (steps || this.stale) {
+      this.stale = false;
+      this.draw();
+    }
     this.raf = requestAnimationFrame(this.frame);
   };
 
