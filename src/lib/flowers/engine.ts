@@ -11,6 +11,9 @@ import { spawnScale } from "./spawn";
 const STEP = 1 / 60;
 const MAX_STEPS = 4;
 
+/** A field whose shorter side is under this many CSS px is on a phone, as Android counts them. */
+const PHONE = 600;
+
 /** Near-white blue page, and a ramp from pale blue through blue to navy. */
 export const DEFAULT_COLORS: HalftoneColors = {
   background: "#f5f8fd",
@@ -32,7 +35,7 @@ const DARK_PAGE = 0.2;
 const DARK_LIFT = 1.2;
 
 export interface FlowerFieldOptions {
-  /** Diamond width in CSS px. Default scales with the width, from 5 to 10. */
+  /** Diamond width in CSS px. Default scales with the width, from 5 to 10, and is at least 6 on a phone. */
   cell?: number;
   /** How many dot sizes to use, evenly spaced. Default 6. */
   steps?: number;
@@ -190,7 +193,7 @@ export class FlowerEngine {
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width < 1 || rect.height < 1) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const cell = this.options.cell ?? Math.round(clamp(rect.width / 170, 5, 10));
+    const cell = this.options.cell ?? autoCell(rect.width, rect.height);
     this.halftone.cell = cell;
     this.halftone.resize(rect.width, rect.height, dpr);
     this.stale = true;
@@ -289,6 +292,12 @@ export function schemeColors(colors?: Partial<HalftoneColors>, scheme: Scheme = 
     return withLightness(colour, DARK_PAGE + span * (t + DARK_LIFT * t * (1 - t) ** 4));
   };
   return { background: flip(out.background), light: flip(out.light), ink: flip(out.ink), dark: flip(out.dark) };
+}
+
+/** Diamond width for a field `width` × `height` CSS px: wider screens get bigger diamonds. A phone's px are physically smaller than a computer's, so its diamonds start a size up. */
+function autoCell(width: number, height: number) {
+  const least = Math.min(width, height) < PHONE ? 6 : 5;
+  return Math.round(clamp(width / 170, least, 10));
 }
 
 function oppositeRamp({ light, ink, dark }: HalftoneColors) {
