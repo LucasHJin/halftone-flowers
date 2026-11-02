@@ -30,13 +30,29 @@ export interface FieldEvents {
     /** Px a second. */
     speed: number;
   };
+  /** Each frame an insect is in the field, at it, then once with `gone` when it leaves. */
+  insect: FieldPoint & {
+    type: "insect";
+    /** The same on every event about this insect. */
+    id: number;
+    insect: InsectKind;
+    /** Px a second. */
+    speed: number;
+    /** Depth among the plants, from 0 at the back to 1 at the front. */
+    depth: number;
+    /** 1 in flight, 0 sitting on a flower, easing between. */
+    air: number;
+    /** Wing beats so far. Each new whole number starts a beat, at the top of a butterfly's stroke. */
+    beat: number;
+    gone: boolean;
+  };
 }
 
 export type FieldEventType = keyof FieldEvents;
 export type FieldEvent = FieldEvents[FieldEventType];
 export type FieldListener<T extends FieldEventType> = (event: FieldEvents[T]) => void;
 
-type ClickType = Exclude<FieldEventType, "trail">;
+type ClickType = Exclude<FieldEventType, "trail" | "insect">;
 /** What a click did, before `FlowerEngine` adds where. */
 export type Tapped = { [T in ClickType]: Omit<FieldEvents[T], keyof FieldPoint> }[ClickType];
 

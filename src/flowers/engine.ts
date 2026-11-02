@@ -1,9 +1,9 @@
 import { lightnessOf, opposite, withLightness } from "../utils/color.js";
-import { clamp } from "../utils/math.js";
+import { clamp, TAU } from "../utils/math.js";
 import { DiamondHalftone, evenSizes, type DotShape, type Grid, type HalftoneColors } from "../halftone/index.js";
 import { FieldEmitter } from "./events.js";
 import { Field } from "./field.js";
-import type { InsectKind } from "./insects/index.js";
+import type { Insect, InsectKind } from "./insects/index.js";
 import { paintField } from "./paint/index.js";
 import { inMask, printTone } from "./paint/tone.js";
 import { Mark, type PointerMark } from "./pointerMark.js";
@@ -126,6 +126,8 @@ export class FlowerEngine {
   private ownCursor: string | null = null;
   /** Where the last `trail` event put the head, or null once one at speed 0 has gone out. */
   private trailAt: { x: number; y: number } | null = null;
+  /** Insects the last `insect` events were about, to send a `gone` when one leaves. */
+  private flying = new Set<Insect>();
   private reducedMotion: MediaQueryList;
   private resizeObserver: ResizeObserver;
   private intersectionObserver: IntersectionObserver;
@@ -310,7 +312,10 @@ export class FlowerEngine {
       this.stale = false;
       this.draw();
     }
-    if (steps) this.emitTrail();
+    if (steps) {
+      this.emitTrail();
+      this.emitInsects();
+    }
     this.raf = requestAnimationFrame(this.frame);
   };
 
@@ -329,10 +334,29 @@ export class FlowerEngine {
     this.events.emit({ type: "trail", x, y, speed: 0, width: this.field.width, height: this.field.height });
   }
 
+  private emitInsects() {
+    if (!this.events.has("insect")) return;
+    const here = new Set(this.field.insects.list);
+    for (const b of this.flying) if (!here.has(b)) this.emitInsect(b, true);
+    this.flying = here;
+    for (const b of here) this.emitInsect(b, false);
+  }
+
+  private stopInsects() {
+    for (const b of this.flying) this.emitInsect(b, true);
+    this.flying.clear();
+  }
+
+  private emitInsect(b: Insect, gone: boolean) {
+    const { width, height } = this.field;
+    this.events.emit({ type: "insect", id: b.id, insect: b.kind, x: b.x, y: b.y, speed: Math.hypot(b.vx, b.vy), depth: b.z, air: b.air, beat: b.flap / TAU, gone, width, height });
+  }
+
   private onMotionPreference = () => {
     if (this.reducedMotion.matches) {
       cancelAnimationFrame(this.raf);
       this.stopTrail();
+      this.stopInsects();
       this.field.endSpawn();
       this.field.insects.reset();
       this.field.petals.reset();

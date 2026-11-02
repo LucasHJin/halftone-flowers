@@ -54,6 +54,7 @@ export class Insects {
   private parts: Part[] = [];
   private next = 0;
   private cover = new Cover();
+  private nextId = 0;
 
   constructor(private field: Field) {
     this.reset();
@@ -83,6 +84,7 @@ export class Insects {
     const from = this.pickEdge();
     let [x, y] = this.offEdge(from, size * 1.5);
     const b: Insect = {
+      id: this.nextId++,
       kind,
       species,
       size,

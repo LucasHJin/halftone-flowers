@@ -21,6 +21,8 @@ export interface Flower {
 }
 
 export interface Insect {
+  /** Unique among a field's insects. */
+  id: number;
   kind: InsectKind;
   /** Index into its group's `species`. */
   species: number;
