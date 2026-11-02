@@ -4,7 +4,7 @@
  * spring driven by the wind plus the pointer's breeze.
  */
 import { clamp, createRandom, lerp, TAU } from "../utils/math.js";
-import type { Tapped } from "./events.js";
+import type { Tapped, Touched } from "./events.js";
 import type { FlowerSettings, Mix } from "./settings.js";
 import { Insects } from "./insects/index.js";
 import { Cover } from "./insects/cover.js";
@@ -21,6 +21,9 @@ const THICKER_FROM = 0.3;
 
 /** A click or tap nudges a flower as hard as brushing this many px across it. */
 const TAP = 12;
+
+/** How many `hand`s clear of a touched flower the pointer must get before touching it counts again; above 1 so its sway can't retrigger it. */
+const LET_GO = 1.5;
 
 export interface FieldLayout {
   width: number;
@@ -48,6 +51,8 @@ export class Field {
   petals: Petals;
   /** The pointer's trail, and its mark when the system cursor is hidden. */
   pointerInk: PointerInk;
+  /** Flowers touched since `FlowerEngine` last took them. */
+  touches: Touched[] = [];
   /** Base flower size, px. */
   bloom = 40;
   /** Diamond width, px. */
@@ -296,6 +301,7 @@ export class Field {
     const from = florets ? SEGMENTS * (1 - florets.reach) : SEGMENTS;
     let grip = 0;
     let at = SEGMENTS - 1;
+    let nearest = Infinity;
     // The lower stem is stiff and mostly hidden, so only the upper two thirds catch.
     for (let k = SEGMENTS / 3; k < SEGMENTS; k++) {
       const ax = s.x[k];
@@ -305,6 +311,7 @@ export class Field {
       const u = clamp(((x - ax) * bx + (y - ay) * by) / (bx * bx + by * by || 1), 0, 1);
       let d = Math.hypot(ax + bx * u - x, ay + by * u - y);
       if (florets && k + u >= from) d -= florets.radius;
+      nearest = Math.min(nearest, d);
       const g = pressure(d, hand) * ((k + u) / SEGMENTS) ** 1.5;
       if (g > grip) {
         grip = g;
@@ -312,18 +319,29 @@ export class Field {
       }
     }
     if (h && !florets) {
-      const g = pressure(Math.hypot(s.x[SEGMENTS] - x, s.y[SEGMENTS] - y) - h.radius * 0.85, hand);
+      const d = Math.hypot(s.x[SEGMENTS] - x, s.y[SEGMENTS] - y) - h.radius * 0.85;
+      nearest = Math.min(nearest, d);
+      const g = pressure(d, hand);
       if (g > grip) {
         grip = g;
         at = SEGMENTS - 1;
       }
     }
+    if (h) this.feel(s, h.kind, nearest, Math.hypot(vx, vy));
     if (grip < 1e-3) return;
     // Only movement across the stem pushes it, by distance (`* dt`), so a flick is no rougher than a sweep.
     const a = s.angle[at];
     const across = (vx * Math.cos(a) + vy * Math.sin(a)) * dt;
     const { strength, limit } = this.settings.cursor;
     s.gust = limit * Math.tanh((s.gust + strength * this.catches(s) * grip * across) / limit);
+  }
+
+  /** Adds to `touches` when the pointer, `nearest` px from a flower, first comes within `hand` of it. */
+  private feel(s: Stem, kind: Kind, nearest: number, speed: number) {
+    if (nearest > this.hand * LET_GO) s.touched = false;
+    if (s.touched || nearest >= this.hand) return;
+    s.touched = true;
+    if (this.growing === null) this.touches.push({ kind, id: s.id, speed, x: this.pointer.x, y: this.pointer.y });
   }
 
   /** Short stems barely sway in the wind, so they catch more of the pointer's to visibly respond. */

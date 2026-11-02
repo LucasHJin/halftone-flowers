@@ -46,15 +46,26 @@ export interface FieldEvents {
     beat: number;
     gone: boolean;
   };
+  /** The moving pointer came within `settings.cursor.reach` of a flower, at the pointer. Fires again only after the pointer moves clear of it. */
+  touch: FieldPoint & {
+    type: "touch";
+    kind: Kind;
+    /** The same on every event about this flower, until the field is laid out again. */
+    id: number;
+    /** The pointer's speed, px a second. */
+    speed: number;
+  };
 }
 
 export type FieldEventType = keyof FieldEvents;
 export type FieldEvent = FieldEvents[FieldEventType];
 export type FieldListener<T extends FieldEventType> = (event: FieldEvents[T]) => void;
 
-type ClickType = Exclude<FieldEventType, "trail" | "insect">;
+type ClickType = Exclude<FieldEventType, "trail" | "insect" | "touch">;
 /** What a click did, before `FlowerEngine` adds where. */
 export type Tapped = { [T in ClickType]: Omit<FieldEvents[T], keyof FieldPoint> }[ClickType];
+/** A flower the pointer touched, before `FlowerEngine` adds the field's size. */
+export type Touched = Omit<FieldEvents["touch"], "type" | "width" | "height">;
 
 export class FieldEmitter {
   private listeners = new Map<FieldEventType, Set<(event: never) => void>>();

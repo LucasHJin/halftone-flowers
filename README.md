@@ -135,6 +135,7 @@ Every event has `type`, `x` and `y` (px from the field's top left), and the fiel
 | `heart` | A click on an insect sends up a heart. | `insect: "butterfly" \| "bee"` |
 | `trail` | Each frame the pointer trail moves, then once at speed 0 when it stops. | `speed: number` (px/s) |
 | `insect` | Each frame an insect is in the field, then once with `gone` when it leaves. | `id: number`, `insect: "butterfly" \| "bee"`, `speed: number` (px/s), `depth: number` (0 back to 1 front), `air: number` (1 in flight, 0 sitting), `beat: number` (wing beats so far), `gone: boolean` |
+| `touch` | The moving pointer comes within `settings.cursor.reach` of a flower. Fires again only after it moves clear. | `kind: Kind`, `id: number` (that flower), `speed: number` (px/s) |
 
 Click events fire inside the `pointerdown`, so a listener can start audio.
 

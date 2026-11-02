@@ -28,6 +28,7 @@ export function createStem(id: number, rootX: number, rootY: number, segment: nu
     bendVel: 0,
     gust: 0,
     breeze: 0,
+    touched: false,
     nod: 0,
     nodVel: 0,
     parent: null,

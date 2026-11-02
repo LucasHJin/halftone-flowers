@@ -4,7 +4,7 @@ import type { FieldEventType, FieldListener } from "./flowers/index.js";
 
 export type FieldEventHandlers = { [T in FieldEventType]?: FieldListener<T> };
 
-const TYPES = Object.keys({ shed: 0, nod: 0, puff: 0, heart: 0, trail: 0, insect: 0 } satisfies Record<FieldEventType, 0>) as FieldEventType[];
+const TYPES = Object.keys({ shed: 0, nod: 0, puff: 0, heart: 0, trail: 0, insect: 0, touch: 0 } satisfies Record<FieldEventType, 0>) as FieldEventType[];
 
 /**
  * Calls `handlers` on events from the `FlowerField` that `field` is the ref of. Handlers may be

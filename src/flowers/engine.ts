@@ -315,6 +315,7 @@ export class FlowerEngine {
     if (steps) {
       this.emitTrail();
       this.emitInsects();
+      this.emitTouches();
     }
     this.raf = requestAnimationFrame(this.frame);
   };
@@ -350,6 +351,13 @@ export class FlowerEngine {
   private emitInsect(b: Insect, gone: boolean) {
     const { width, height } = this.field;
     this.events.emit({ type: "insect", id: b.id, insect: b.kind, x: b.x, y: b.y, speed: Math.hypot(b.vx, b.vy), depth: b.z, air: b.air, beat: b.flap / TAU, gone, width, height });
+  }
+
+  private emitTouches() {
+    const { touches, width, height } = this.field;
+    if (!touches.length) return;
+    this.field.touches = [];
+    for (const touch of touches) this.events.emit({ type: "touch", ...touch, width, height });
   }
 
   private onMotionPreference = () => {

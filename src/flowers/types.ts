@@ -89,6 +89,8 @@ export interface Stem {
   gust: number;
   /** How much of that gust has reached the stem so far. */
   breeze: number;
+  /** The pointer is touching it; false again once the pointer's clear. */
+  touched: boolean;
   /** Extra tilt of the flower head, lagging the stem. */
   nod: number;
   nodVel: number;
