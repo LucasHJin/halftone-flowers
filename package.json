@@ -1,6 +1,6 @@
 {
   "name": "halftone-flowers",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Halftone flower field React component built with WebGL2 and TypeScript.",
   "keywords": [
     "react",
